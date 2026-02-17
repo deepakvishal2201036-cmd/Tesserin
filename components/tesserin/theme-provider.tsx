@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useState, useCallback } from "react"
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react"
 
 /**
  * TesserinThemeContext
@@ -178,15 +178,30 @@ const THEME_STYLES = `
 
 interface ThemeProviderProps {
   children: React.ReactNode
-  /** Initial palette – defaults to Ceramic White (light) */
-  defaultDark?: boolean
 }
 
 export function TesserinThemeProvider({
   children,
-  defaultDark = false,
 }: ThemeProviderProps) {
-  const [isDark, setIsDark] = useState(defaultDark)
+  // Initialize with system preference
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches
+    }
+    return false
+  })
+  
+  // Listen for system theme changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+      
+      const handler = (e: MediaQueryListEvent) => setIsDark(e.matches)
+      mediaQuery.addEventListener('change', handler)
+      return () => mediaQuery.removeEventListener('change', handler)
+    }
+  }, [])
+  
   const toggleTheme = useCallback(() => setIsDark((prev) => !prev), [])
 
   return (
