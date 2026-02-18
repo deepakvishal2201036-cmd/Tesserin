@@ -1,11 +1,10 @@
 "use client"
 
 import React from "react"
-import { FiFileText, FiCompass, FiCode, FiSun, FiMoon, FiSettings, FiGrid, FiCalendar } from "react-icons/fi"
+import { FiFileText, FiCompass, FiCode, FiSettings, FiGrid, FiCalendar } from "react-icons/fi"
 import { HiOutlineCpuChip } from "react-icons/hi2"
 import { SkeuoPanel } from "./skeuo-panel"
 import { TesserinLogo } from "./tesserin-logo"
-import { useTesserinTheme } from "./theme-provider"
 
 /**
  * LeftDock
@@ -47,8 +46,6 @@ interface LeftDockProps {
 }
 
 export function LeftDock({ activeTab, setActiveTab }: LeftDockProps) {
-  const { isDark, toggleTheme } = useTesserinTheme()
-
   return (
     <div className="m-3 mr-0 w-20 flex-shrink-0 z-30 flex flex-col gap-4">
       <SkeuoPanel className="h-full flex flex-col items-center py-6 gap-6">
@@ -86,13 +83,6 @@ export function LeftDock({ activeTab, setActiveTab }: LeftDockProps) {
 
         {/* Utility buttons */}
         <div className="flex flex-col gap-4 mb-2 items-center">
-          <button
-            onClick={toggleTheme}
-            className="skeuo-btn w-10 h-10 flex items-center justify-center rounded-full"
-            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-          >
-            {isDark ? <FiSun size={18} /> : <FiMoon size={18} />}
-          </button>
           <button className="skeuo-btn w-10 h-10 flex items-center justify-center rounded-full" aria-label="Settings">
             <FiSettings size={18} />
           </button>

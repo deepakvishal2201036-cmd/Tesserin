@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react"
+import React, { createContext, useContext, useCallback } from "react"
 
 /**
  * TesserinThemeContext
@@ -24,7 +24,7 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  isDark: false,
+  isDark: true,
   toggleTheme: () => {},
 })
 
@@ -183,30 +183,13 @@ interface ThemeProviderProps {
 export function TesserinThemeProvider({
   children,
 }: ThemeProviderProps) {
-  // Initialize with system preference
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches
-    }
-    return false
-  })
-  
-  // Listen for system theme changes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-      
-      const handler = (e: MediaQueryListEvent) => setIsDark(e.matches)
-      mediaQuery.addEventListener('change', handler)
-      return () => mediaQuery.removeEventListener('change', handler)
-    }
-  }, [])
-  
-  const toggleTheme = useCallback(() => setIsDark((prev) => !prev), [])
+  // Tesserin is strictly dark mode (Obsidian Black)
+  const isDark = true
+  const toggleTheme = useCallback(() => {}, [])
 
   return (
     <ThemeContext.Provider value={{ isDark, toggleTheme }}>
-      <div className={isDark ? "theme-dark" : "theme-light"}>
+      <div className="theme-dark">
         {/* Inject custom properties into the document */}
         <style dangerouslySetInnerHTML={{ __html: THEME_STYLES }} />
         {children}
