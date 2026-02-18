@@ -17,6 +17,7 @@ electron/dist/
 *.msi
 *.blockmap
 *.yml
+!.github/workflows/*.yml
 
 # ── Environment ──
 .env
