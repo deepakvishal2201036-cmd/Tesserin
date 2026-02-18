@@ -16,6 +16,7 @@ export declare function updateNote(id: string, data: {
     content?: string;
     folderId?: string;
     isPinned?: boolean;
+    isArchived?: boolean;
 }): unknown;
 export declare function deleteNote(id: string): Database.RunResult;
 export declare function searchNotes(query: string): unknown[];

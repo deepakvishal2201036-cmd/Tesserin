@@ -1,213 +1,449 @@
 "use client"
 
 import React, { useState, useCallback } from "react"
-import { FiDownload, FiFileText, FiCode, FiFile, FiCopy, FiCheck } from "react-icons/fi"
+import {
+  FiDownload, FiFileText, FiCode, FiFile, FiCopy, FiCheck,
+  FiPrinter, FiBook, FiGlobe, FiPackage, FiChevronDown,
+} from "react-icons/fi"
 import { SkeuoPanel } from "../core/skeuo-panel"
 import { useNotes, type Note } from "@/lib/notes-store"
 
 /**
- * ExportPanel
+ * ExportPanel v2
  *
- * Export notes in multiple formats:
+ * Full export pipeline with:
  * - Markdown (.md)
- * - HTML (.html) 
+ * - HTML (styled web page with Tesserin theme)
  * - Plain Text (.txt)
  * - JSON (full vault backup)
+ * - PDF (via browser print API)
+ * - LaTeX (.tex)
+ * - DOCX (simplified XML-based)
+ * - Batch vault export
  */
 
 interface ExportPanelProps {
-    isOpen: boolean
-    onClose: () => void
-    note?: Note | null
+  isOpen: boolean
+  onClose: () => void
+  note?: Note | null
 }
 
-type ExportFormat = "markdown" | "html" | "txt" | "json"
+type ExportFormat = "markdown" | "html" | "txt" | "json" | "pdf" | "latex" | "docx"
 
-function noteToHTML(note: Note): string {
-    // Simple Markdown→HTML conversion
-    let html = note.content
-        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/`(.+?)`/g, '<code>$1</code>')
-        .replace(/\[\[(.+?)\]\]/g, '<a href="#$1">$1</a>')
-        .replace(/^- (.+)$/gm, '<li>$1</li>')
-        .replace(/\n\n/g, '</p><p>')
+/* ── Converters ── */
 
-    return `<!DOCTYPE html>
+function noteToHTML(note: Note, standalone = true): string {
+  let html = note.content
+    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/~~(.+?)~~/g, "<del>$1</del>")
+    .replace(/`(.+?)`/g, "<code>$1</code>")
+    .replace(/\[\[(.+?)\]\]/g, '<a href="#$1" class="wiki-link">$1</a>')
+    .replace(/\(\(([a-z0-9]{4,12})\)\)/g, '<span class="block-ref" data-block="$1">↗ $1</span>')
+    .replace(/^- \[x\] (.+)$/gm, '<li class="task done"><input type="checkbox" checked disabled> $1</li>')
+    .replace(/^- \[ \] (.+)$/gm, '<li class="task"><input type="checkbox" disabled> $1</li>')
+    .replace(/^- (.+)$/gm, "<li>$1</li>")
+    .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
+    .replace(/^> (.+)$/gm, "<blockquote>$1</blockquote>")
+    .replace(/\n\n/g, "</p><p>")
+
+  if (!standalone) return html
+
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${note.title} — Tesserin</title>
   <style>
-    body { font-family: 'Inter', -apple-system, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; line-height: 1.7; }
-    h1, h2, h3 { margin-top: 2em; }
-    code { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
-    a { color: #d4a800; text-decoration: underline; }
+    :root { --gold: #FACC15; --bg: #FAFAF8; --text: #1a1a1a; --text-light: #555; --border: #e5e5e5; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0a0a0a; --text: #ededed; --text-light: #888; --border: #222; }
+    }
+    body { font-family: 'Inter', -apple-system, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 24px; color: var(--text); background: var(--bg); line-height: 1.75; }
+    h1 { font-size: 2em; margin-top: 1.5em; border-bottom: 2px solid var(--gold); padding-bottom: 8px; }
+    h2 { font-size: 1.5em; margin-top: 1.5em; }
+    h3 { font-size: 1.2em; margin-top: 1.2em; }
+    code { background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; font-family: 'JetBrains Mono', monospace; }
+    pre { background: rgba(0,0,0,0.06); padding: 16px; border-radius: 8px; overflow-x: auto; }
+    blockquote { border-left: 3px solid var(--gold); margin: 1em 0; padding: 8px 16px; color: var(--text-light); font-style: italic; }
+    a, .wiki-link { color: var(--gold); text-decoration: underline; text-underline-offset: 3px; }
+    .block-ref { color: var(--gold); font-size: 0.85em; opacity: 0.8; }
     li { margin: 4px 0; }
-    .meta { color: #888; font-size: 0.85em; margin-bottom: 2em; }
+    .task { list-style: none; margin-left: -20px; }
+    .task.done { text-decoration: line-through; opacity: 0.6; }
+    .meta { color: var(--text-light); font-size: 0.85em; margin-bottom: 2em; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
+    @media print { body { max-width: 100%; margin: 0; } }
   </style>
 </head>
 <body>
   <div class="meta">
+    <p><strong>${note.title}</strong></p>
     <p>Created: ${new Date(note.createdAt).toLocaleDateString()} · Updated: ${new Date(note.updatedAt).toLocaleDateString()}</p>
+    <p><em>Exported from Tesserin</em></p>
   </div>
   <p>${html}</p>
 </body>
 </html>`
 }
 
-function downloadFile(filename: string, content: string, mimeType: string) {
-    const blob = new Blob([content], { type: mimeType })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+function noteToLatex(note: Note): string {
+  let latex = note.content
+    // Headers
+    .replace(/^# (.+)$/gm, "\\section{$1}")
+    .replace(/^## (.+)$/gm, "\\subsection{$1}")
+    .replace(/^### (.+)$/gm, "\\subsubsection{$1}")
+    .replace(/^#### (.+)$/gm, "\\paragraph{$1}")
+    // Formatting
+    .replace(/\*\*(.+?)\*\*/g, "\\textbf{$1}")
+    .replace(/\*(.+?)\*/g, "\\textit{$1}")
+    .replace(/~~(.+?)~~/g, "\\sout{$1}")
+    .replace(/`(.+?)`/g, "\\texttt{$1}")
+    // Wiki links → footnotes
+    .replace(/\[\[(.+?)\]\]/g, "$1\\footnote{See note: $1}")
+    // Block references
+    .replace(/\(\(([a-z0-9]{4,12})\)\)/g, "[ref: $1]")
+    // Lists (simple conversion)
+    .replace(/^- \[x\] (.+)$/gm, "  \\item[$\\boxtimes$] $1")
+    .replace(/^- \[ \] (.+)$/gm, "  \\item[$\\square$] $1")
+    .replace(/^- (.+)$/gm, "  \\item $1")
+    // Blockquotes
+    .replace(/^> (.+)$/gm, "\\begin{quote}\n$1\n\\end{quote}")
+    // Horizontal rules
+    .replace(/^(-{3,}|_{3,}|\*{3,})$/gm, "\\hrulefill")
+    // Escape special chars (after all other replacements)
+    .replace(/%/g, "\\%")
+    .replace(/&(?!\\)/g, "\\&")
+
+  return `\\documentclass[12pt,a4paper]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage{lmodern}
+\\usepackage{hyperref}
+\\usepackage{geometry}
+\\usepackage{ulem}
+\\usepackage{amssymb}
+\\usepackage{enumitem}
+
+\\geometry{margin=1in}
+\\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue}
+
+\\title{${note.title.replace(/[%&_#{}]/g, (m) => "\\" + m)}}
+\\date{${new Date(note.updatedAt).toLocaleDateString()}}
+\\author{Tesserin Export}
+
+\\begin{document}
+\\maketitle
+
+${latex}
+
+\\end{document}
+`
 }
 
+function noteToDocx(note: Note): string {
+  // Simplified DOCX as XML (can be opened by LibreOffice/Word)
+  const escaped = note.content
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\[\[(.+?)\]\]/g, "$1")
+    .replace(/\(\(([a-z0-9]{4,12})\)\)/g, "[ref: $1]")
+
+  const lines = escaped.split("\n")
+  const paragraphs = lines
+    .map((line) => {
+      // Headings
+      const h1 = line.match(/^# (.+)$/)
+      if (h1) return `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${h1[1]}</w:t></w:r></w:p>`
+      const h2 = line.match(/^## (.+)$/)
+      if (h2) return `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>${h2[1]}</w:t></w:r></w:p>`
+      const h3 = line.match(/^### (.+)$/)
+      if (h3) return `<w:p><w:pPr><w:pStyle w:val="Heading3"/></w:pPr><w:r><w:t>${h3[1]}</w:t></w:r></w:p>`
+
+      // Bold
+      let text = line
+        .replace(/\*\*(.+?)\*\*/g, "</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>$1</w:t></w:r><w:r><w:t>")
+        .replace(/\*(.+?)\*/g, "</w:t></w:r><w:r><w:rPr><w:i/></w:rPr><w:t>$1</w:t></w:r><w:r><w:t>")
+        .replace(/`(.+?)`/g, "</w:t></w:r><w:r><w:rPr><w:rFonts w:ascii=\"Courier New\" w:hAnsi=\"Courier New\"/></w:rPr><w:t>$1</w:t></w:r><w:r><w:t>")
+
+      // Strip remaining markdown
+      text = text.replace(/^[-*] /, "• ").replace(/^\d+\. /, "")
+        .replace(/^> /, "")
+        .replace(/^- \[.\] /, "☐ ")
+
+      return `<w:p><w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`
+    })
+    .join("\n")
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<?mso-application progid="Word.Document"?>
+<w:wordDocument xmlns:w="http://schemas.microsoft.com/office/word/2003/wordml"
+  xmlns:wx="http://schemas.microsoft.com/office/word/2003/auxHint">
+<w:body>
+  <w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>${note.title.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</w:t></w:r></w:p>
+  <w:p><w:pPr><w:pStyle w:val="Subtitle"/></w:pPr><w:r><w:rPr><w:color w:val="888888"/></w:rPr><w:t>Exported from Tesserin — ${new Date().toLocaleDateString()}</w:t></w:r></w:p>
+  ${paragraphs}
+</w:body>
+</w:wordDocument>`
+}
+
+function downloadFile(filename: string, content: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+function safeName(title: string): string {
+  return title
+    .replace(/[^a-zA-Z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .toLowerCase()
+}
+
+/* ── Component ── */
+
 export function ExportPanel({ isOpen, onClose, note }: ExportPanelProps) {
-    const { notes } = useNotes()
-    const [exported, setExported] = useState<string | null>(null)
+  const { notes } = useNotes()
+  const [exported, setExported] = useState<string | null>(null)
+  const [batchFormat, setBatchFormat] = useState<ExportFormat>("markdown")
+  const [showBatchMenu, setShowBatchMenu] = useState(false)
 
-    const exportNote = useCallback(
-        (format: ExportFormat) => {
-            const target = note || (notes.length > 0 ? notes[0] : null)
-            if (!target) return
+  const exportNote = useCallback(
+    (format: ExportFormat) => {
+      const target = note || (notes.length > 0 ? notes[0] : null)
+      if (!target) return
 
-            const safeName = target.title.replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "-").toLowerCase()
+      const name = safeName(target.title)
 
-            switch (format) {
-                case "markdown":
-                    downloadFile(`${safeName}.md`, target.content, "text/markdown")
-                    break
-                case "html":
-                    downloadFile(`${safeName}.html`, noteToHTML(target), "text/html")
-                    break
-                case "txt":
-                    downloadFile(
-                        `${safeName}.txt`,
-                        target.content.replace(/[#*`\[\]]/g, ""),
-                        "text/plain",
-                    )
-                    break
-                case "json":
-                    downloadFile(
-                        `${safeName}.json`,
-                        JSON.stringify(target, null, 2),
-                        "application/json",
-                    )
-                    break
-            }
-            setExported(format)
-            setTimeout(() => setExported(null), 2000)
-        },
-        [note, notes],
-    )
-
-    const exportVault = useCallback(() => {
-        const vault = {
-            version: "1.0",
-            exportedAt: new Date().toISOString(),
-            noteCount: notes.length,
-            notes: notes.map((n) => ({
-                id: n.id,
-                title: n.title,
-                content: n.content,
-                createdAt: n.createdAt,
-                updatedAt: n.updatedAt,
-            })),
+      switch (format) {
+        case "markdown":
+          downloadFile(`${name}.md`, target.content, "text/markdown")
+          break
+        case "html":
+          downloadFile(`${name}.html`, noteToHTML(target), "text/html")
+          break
+        case "txt":
+          downloadFile(
+            `${name}.txt`,
+            target.content.replace(/[#*`\[\]]/g, ""),
+            "text/plain",
+          )
+          break
+        case "json":
+          downloadFile(
+            `${name}.json`,
+            JSON.stringify(target, null, 2),
+            "application/json",
+          )
+          break
+        case "pdf": {
+          // Open HTML in new window and trigger print
+          const htmlContent = noteToHTML(target)
+          const printWindow = window.open("", "_blank")
+          if (printWindow) {
+            printWindow.document.write(htmlContent)
+            printWindow.document.close()
+            setTimeout(() => {
+              printWindow.print()
+            }, 500)
+          }
+          break
         }
-        downloadFile("tesserin-vault.json", JSON.stringify(vault, null, 2), "application/json")
-        setExported("json")
-        setTimeout(() => setExported(null), 2000)
-    }, [notes])
+        case "latex":
+          downloadFile(`${name}.tex`, noteToLatex(target), "application/x-tex")
+          break
+        case "docx":
+          downloadFile(`${name}.xml`, noteToDocx(target), "application/msword")
+          break
+      }
+      setExported(format)
+      setTimeout(() => setExported(null), 2000)
+    },
+    [note, notes],
+  )
 
-    if (!isOpen) return null
+  const exportVault = useCallback(() => {
+    if (batchFormat === "json") {
+      const vault = {
+        version: "2.0",
+        exportedAt: new Date().toISOString(),
+        noteCount: notes.length,
+        notes: notes.map((n) => ({
+          id: n.id,
+          title: n.title,
+          content: n.content,
+          createdAt: n.createdAt,
+          updatedAt: n.updatedAt,
+        })),
+      }
+      downloadFile("tesserin-vault.json", JSON.stringify(vault, null, 2), "application/json")
+    } else {
+      // Export each note individually in the selected format
+      notes.forEach((n) => {
+        const name = safeName(n.title)
+        switch (batchFormat) {
+          case "markdown":
+            downloadFile(`${name}.md`, n.content, "text/markdown")
+            break
+          case "html":
+            downloadFile(`${name}.html`, noteToHTML(n), "text/html")
+            break
+          case "latex":
+            downloadFile(`${name}.tex`, noteToLatex(n), "application/x-tex")
+            break
+          case "txt":
+            downloadFile(`${name}.txt`, n.content.replace(/[#*`\[\]]/g, ""), "text/plain")
+            break
+        }
+      })
+    }
+    setExported("json")
+    setTimeout(() => setExported(null), 2000)
+  }, [notes, batchFormat])
 
-    const formats: Array<{
-        id: ExportFormat
-        label: string
-        desc: string
-        icon: React.ReactNode
-    }> = [
-            { id: "markdown", label: "Markdown", desc: ".md file", icon: <FiFileText size={16} /> },
-            { id: "html", label: "HTML", desc: "Styled web page", icon: <FiCode size={16} /> },
-            { id: "txt", label: "Plain Text", desc: ".txt file", icon: <FiFile size={16} /> },
-            { id: "json", label: "JSON", desc: "Structured data", icon: <FiCopy size={16} /> },
-        ]
+  if (!isOpen) return null
 
-    return (
-        <div
-            className="fixed inset-0 z-[90] flex items-center justify-center"
-            onClick={onClose}
-            style={{ backgroundColor: "rgba(0, 0, 0, 0.4)", backdropFilter: "blur(4px)" }}
-        >
-            <SkeuoPanel
-                className="w-full max-w-md p-6 animate-in fade-in slide-in-from-bottom-4 duration-200"
-                onClick={(e: React.MouseEvent) => e.stopPropagation()}
-            >
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-2">
-                        <FiDownload size={20} style={{ color: "var(--accent-primary)" }} />
-                        <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
-                            Export
-                        </h2>
-                    </div>
-                    <button onClick={onClose} className="skeuo-btn px-2 py-1 text-xs rounded-lg">
-                        Close
-                    </button>
-                </div>
+  const formats: Array<{
+    id: ExportFormat
+    label: string
+    desc: string
+    icon: React.ReactNode
+  }> = [
+    { id: "markdown", label: "Markdown", desc: ".md file", icon: <FiFileText size={16} /> },
+    { id: "html", label: "HTML", desc: "Styled web page", icon: <FiGlobe size={16} /> },
+    { id: "pdf", label: "PDF", desc: "Print to PDF", icon: <FiPrinter size={16} /> },
+    { id: "latex", label: "LaTeX", desc: ".tex document", icon: <FiBook size={16} /> },
+    { id: "docx", label: "DOCX", desc: "Word XML format", icon: <FiFile size={16} /> },
+    { id: "txt", label: "Plain Text", desc: ".txt file", icon: <FiCode size={16} /> },
+    { id: "json", label: "JSON", desc: "Structured data", icon: <FiCopy size={16} /> },
+  ]
 
-                {/* Single note export */}
-                {note && (
-                    <div className="mb-4">
-                        <p className="text-xs mb-3" style={{ color: "var(--text-tertiary)" }}>
-                            Exporting: <strong style={{ color: "var(--text-primary)" }}>{note.title}</strong>
-                        </p>
-                    </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                    {formats.map((f) => (
-                        <button
-                            key={f.id}
-                            onClick={() => exportNote(f.id)}
-                            className="skeuo-btn p-4 rounded-xl text-left flex flex-col gap-1 active"
-                        >
-                            <div className="flex items-center gap-2">
-                                {exported === f.id ? (
-                                    <FiCheck size={16} className="text-green-500" />
-                                ) : (
-                                    f.icon
-                                )}
-                                <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                                    {f.label}
-                                </span>
-                            </div>
-                            <span className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
-                                {f.desc}
-                            </span>
-                        </button>
-                    ))}
-                </div>
-
-                {/* Full vault export */}
-                <button
-                    onClick={exportVault}
-                    className="w-full skeuo-btn p-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 active"
-                    style={{ color: "var(--accent-primary)" }}
-                >
-                    <FiDownload size={16} />
-                    Export Entire Vault ({notes.length} notes)
-                </button>
-            </SkeuoPanel>
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center"
+      onClick={onClose}
+      style={{ backgroundColor: "rgba(0, 0, 0, 0.4)", backdropFilter: "blur(4px)" }}
+    >
+      <SkeuoPanel
+        className="w-full max-w-lg p-6 animate-in fade-in slide-in-from-bottom-4 duration-200"
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <FiDownload size={20} style={{ color: "var(--accent-primary)" }} />
+            <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
+              Export Pipeline
+            </h2>
+          </div>
+          <button onClick={onClose} className="skeuo-btn px-2 py-1 text-xs rounded-lg">
+            Close
+          </button>
         </div>
-    )
+
+        {/* Single note export */}
+        {note && (
+          <div className="mb-4">
+            <p className="text-xs mb-3" style={{ color: "var(--text-tertiary)" }}>
+              Exporting: <strong style={{ color: "var(--text-primary)" }}>{note.title}</strong>
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          {formats.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => exportNote(f.id)}
+              className="skeuo-btn p-4 rounded-xl text-left flex flex-col gap-1 active"
+            >
+              <div className="flex items-center gap-2">
+                {exported === f.id ? (
+                  <FiCheck size={16} className="text-green-500" />
+                ) : (
+                  f.icon
+                )}
+                <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {f.label}
+                </span>
+              </div>
+              <span className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                {f.desc}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Divider */}
+        <div
+          className="h-px my-4"
+          style={{ backgroundColor: "var(--border-dark)" }}
+        />
+
+        {/* Full vault export */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportVault}
+            className="flex-1 skeuo-btn p-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 active"
+            style={{ color: "var(--accent-primary)" }}
+          >
+            <FiPackage size={16} />
+            Export Entire Vault ({notes.length} notes)
+          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowBatchMenu(!showBatchMenu)}
+              className="skeuo-btn px-3 py-3 rounded-xl text-xs flex items-center gap-1"
+            >
+              {batchFormat.toUpperCase()} <FiChevronDown size={10} />
+            </button>
+            {showBatchMenu && (
+              <div
+                className="absolute bottom-full right-0 mb-1 rounded-lg overflow-hidden z-50"
+                style={{
+                  backgroundColor: "var(--bg-panel)",
+                  border: "1px solid var(--border-mid)",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
+                }}
+              >
+                {(["markdown", "html", "latex", "txt", "json"] as ExportFormat[]).map((fmt) => (
+                  <button
+                    key={fmt}
+                    onClick={() => {
+                      setBatchFormat(fmt)
+                      setShowBatchMenu(false)
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors"
+                    style={{
+                      color: fmt === batchFormat ? "var(--accent-primary)" : "var(--text-secondary)",
+                    }}
+                  >
+                    {fmt.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Info footer */}
+        <p
+          className="text-[10px] mt-4 text-center"
+          style={{ color: "var(--text-tertiary)" }}
+        >
+          PDF uses your browser&apos;s print dialog · LaTeX requires a TeX compiler (TeXLive, MiKTeX) · DOCX exports as Word XML
+        </p>
+      </SkeuoPanel>
+    </div>
+  )
 }

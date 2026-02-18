@@ -56,10 +56,14 @@ function getDbPath() {
 function initDatabase() {
     const dbPath = getDbPath();
     db = new better_sqlite3_1.default(dbPath);
-    // Enable WAL mode for better performance
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    // Create tables
+    // ── Pragmas for production-grade performance & safety ────────────
+    db.pragma('journal_mode = WAL'); // Write-Ahead Logging
+    db.pragma('foreign_keys = ON'); // Enforce FK constraints
+    db.pragma('busy_timeout = 5000'); // Wait up to 5s on lock contention
+    db.pragma('synchronous = NORMAL'); // Safe with WAL, faster than FULL
+    db.pragma('cache_size = -64000'); // 64MB page cache
+    db.pragma('temp_store = MEMORY'); // Temp tables in memory
+    // ── Core schema ─────────────────────────────────────────────────
     db.exec(`
     CREATE TABLE IF NOT EXISTS folders (
       id        TEXT PRIMARY KEY,
@@ -76,6 +80,7 @@ function initDatabase() {
       folder_id   TEXT REFERENCES folders(id) ON DELETE SET NULL,
       is_daily    INTEGER DEFAULT 0,
       is_pinned   INTEGER DEFAULT 0,
+      is_archived INTEGER DEFAULT 0,
       created_at  TEXT DEFAULT (datetime('now')),
       updated_at  TEXT DEFAULT (datetime('now'))
     );
@@ -96,19 +101,21 @@ function initDatabase() {
       id         TEXT PRIMARY KEY,
       title      TEXT NOT NULL,
       note_id    TEXT REFERENCES notes(id) ON DELETE SET NULL,
-      status     TEXT DEFAULT 'todo',
-      priority   INTEGER DEFAULT 0,
+      status     TEXT NOT NULL DEFAULT 'backlog',
+      priority   INTEGER NOT NULL DEFAULT 0 CHECK(priority BETWEEN 0 AND 3),
       due_date   TEXT,
-      column_id  TEXT DEFAULT 'backlog',
+      column_id  TEXT NOT NULL DEFAULT 'backlog',
       sort_order INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS templates (
-      id       TEXT PRIMARY KEY,
-      name     TEXT NOT NULL,
-      content  TEXT DEFAULT '',
-      category TEXT DEFAULT 'general'
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      content    TEXT DEFAULT '',
+      category   TEXT DEFAULT 'general',
+      created_at TEXT DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -125,7 +132,33 @@ function initDatabase() {
       created_at  TEXT DEFAULT (datetime('now')),
       updated_at  TEXT DEFAULT (datetime('now'))
     );
+
+    /* ── Indexes for query patterns ── */
+    CREATE INDEX IF NOT EXISTS idx_notes_folder     ON notes(folder_id);
+    CREATE INDEX IF NOT EXISTS idx_notes_updated     ON notes(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notes_pinned      ON notes(is_pinned DESC, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notes_title       ON notes(title COLLATE NOCASE);
+    CREATE INDEX IF NOT EXISTS idx_notes_daily       ON notes(is_daily) WHERE is_daily = 1;
+    CREATE INDEX IF NOT EXISTS idx_tasks_column      ON tasks(column_id, sort_order);
+    CREATE INDEX IF NOT EXISTS idx_tasks_status      ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_tasks_due         ON tasks(due_date) WHERE due_date IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_note_tags_tag     ON note_tags(tag_id);
+    CREATE INDEX IF NOT EXISTS idx_folders_parent    ON folders(parent_id);
+    CREATE INDEX IF NOT EXISTS idx_canvases_updated  ON canvases(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_templates_cat     ON templates(category, name);
   `);
+    // ── Schema migrations for existing databases ────────────────────
+    // Safely add columns that may not exist in older DBs
+    const migrations = [
+        "ALTER TABLE notes ADD COLUMN is_archived INTEGER DEFAULT 0",
+        "ALTER TABLE tasks ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))",
+    ];
+    for (const sql of migrations) {
+        try {
+            db.exec(sql);
+        }
+        catch { /* column already exists — safe to skip */ }
+    }
     // Seed data if fresh database
     const count = db.prepare('SELECT COUNT(*) as c FROM notes').get();
     if (count.c === 0) {
@@ -190,6 +223,10 @@ function updateNote(id, data) {
         sets.push('is_pinned = ?');
         values.push(data.isPinned ? 1 : 0);
     }
+    if (data.isArchived !== undefined) {
+        sets.push('is_archived = ?');
+        values.push(data.isArchived ? 1 : 0);
+    }
     sets.push("updated_at = datetime('now')");
     values.push(id);
     db.prepare(`UPDATE notes SET ${sets.join(', ')} WHERE id = ?`).run(...values);
@@ -241,11 +278,12 @@ function deleteFolder(id) {
 }
 // ── Task Operations ───────────────────────────────────────────────────
 function listTasks() {
-    return db.prepare('SELECT * FROM tasks ORDER BY sort_order, created_at DESC').all();
+    return db.prepare('SELECT * FROM tasks ORDER BY column_id, sort_order, created_at DESC').all();
 }
 function createTask(data) {
     const id = (0, crypto_1.randomUUID)();
-    db.prepare('INSERT INTO tasks (id, title, note_id, column_id, priority, due_date) VALUES (?, ?, ?, ?, ?, ?)').run(id, data.title, data.noteId || null, data.columnId || 'backlog', data.priority || 0, data.dueDate || null);
+    const columnId = data.columnId || 'backlog';
+    db.prepare('INSERT INTO tasks (id, title, note_id, status, column_id, priority, due_date) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, data.title, data.noteId || null, columnId, columnId, data.priority ?? 0, data.dueDate || null);
     return db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
 }
 function updateTask(id, data) {
@@ -261,8 +299,14 @@ function updateTask(id, data) {
             values.push(data[key]);
         }
     }
+    // Keep status in sync with column_id
+    if (data.columnId !== undefined && data.status === undefined) {
+        sets.push('status = ?');
+        values.push(data.columnId);
+    }
     if (sets.length === 0)
         return;
+    sets.push("updated_at = datetime('now')");
     values.push(id);
     db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).run(...values);
     return db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);

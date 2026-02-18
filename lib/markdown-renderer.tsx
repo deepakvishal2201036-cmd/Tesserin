@@ -18,6 +18,9 @@ import React from "react"
  * - Tables (GFM-style)
  * - `[[Wiki Links]]` as clickable references (optional)
  * - Task lists (`- [ ]` / `- [x]`)
+ * - Block references `((block-id))` and embeds `!((block-id))`
+ * - Citation references `[@key]` with optional page `[@key, p. 42]`
+ * - Block ID markers `^block-id`
  *
  * @param markdown       Raw Markdown source.
  * @param options        Optional overrides.
@@ -31,11 +34,20 @@ export function renderMarkdown(
     onLinkClick?: (title: string) => void
     /** Base text size class (default: "text-xs") */
     textSize?: string
+    /** Block index: maps blockId → { content, noteTitle } for resolving block references. */
+    blockIndex?: Map<string, { content: string; noteId: string; noteTitle: string }>
+    /** Callback when a block reference is clicked. */
+    onBlockRefClick?: (blockId: string, noteId: string) => void
+    /** Callback when a citation is clicked (opens reference manager). */
+    onCitationClick?: (key: string) => void
   },
 ): React.ReactNode {
   const existingTitles = options?.existingTitles ?? new Set<string>()
   const onLinkClick = options?.onLinkClick
   const textSize = options?.textSize ?? "text-xs"
+  const blockIndex = options?.blockIndex
+  const onBlockRefClick = options?.onBlockRefClick
+  const onCitationClick = options?.onCitationClick
 
   const lines = markdown.split("\n")
   const elements: React.ReactNode[] = []
@@ -49,6 +61,114 @@ export function renderMarkdown(
     let inlineKey = 0
 
     while (remaining.length > 0) {
+      // Block embed !((block-id))
+      const embedMatch = remaining.match(/^!\(\(([a-z0-9]{4,12})\)\)/)
+      if (embedMatch && blockIndex) {
+        const blockId = embedMatch[1]
+        const block = blockIndex.get(blockId)
+        parts.push(
+          <div
+            key={`embed-${inlineKey++}`}
+            className="my-1 pl-3 py-1.5 rounded-lg"
+            style={{
+              borderLeft: "3px solid var(--accent-primary)",
+              backgroundColor: "rgba(250, 204, 21, 0.04)",
+              cursor: block && onBlockRefClick ? "pointer" : "default",
+            }}
+            onClick={() => block && onBlockRefClick?.(blockId, block.noteId)}
+            title={block ? `From: ${block.noteTitle}` : `Unresolved block: ${blockId}`}
+          >
+            {block ? (
+              <>
+                <span className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                  {block.content}
+                </span>
+                <span className="ml-2 text-[9px]" style={{ color: "var(--text-tertiary)" }}>
+                  ↗ {block.noteTitle}
+                </span>
+              </>
+            ) : (
+              <span className="text-xs italic" style={{ color: "var(--text-tertiary)" }}>
+                Unresolved block: {blockId}
+              </span>
+            )}
+          </div>,
+        )
+        remaining = remaining.slice(embedMatch[0].length)
+        continue
+      }
+
+      // Block reference ((block-id))
+      const blockRefMatch = remaining.match(/^\(\(([a-z0-9]{4,12})\)\)/)
+      if (blockRefMatch) {
+        const blockId = blockRefMatch[1]
+        const block = blockIndex?.get(blockId)
+        parts.push(
+          <span
+            key={`bref-${inlineKey++}`}
+            className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded font-medium cursor-pointer transition-colors"
+            style={{
+              backgroundColor: "rgba(250, 204, 21, 0.08)",
+              color: "var(--accent-primary)",
+              fontSize: "0.85em",
+              border: "1px solid rgba(250, 204, 21, 0.15)",
+            }}
+            onClick={() => block && onBlockRefClick?.(blockId, block.noteId)}
+            title={
+              block
+                ? `"${block.content.slice(0, 80)}${block.content.length > 80 ? "..." : ""}" — ${block.noteTitle}`
+                : `Unresolved: ${blockId}`
+            }
+          >
+            {block ? block.content.slice(0, 40) + (block.content.length > 40 ? "…" : "") : `((${blockId}))`}
+          </span>,
+        )
+        remaining = remaining.slice(blockRefMatch[0].length)
+        continue
+      }
+
+      // Citation reference [@key] or [@key, p. 42]
+      const citationMatch = remaining.match(/^\[@([a-zA-Z0-9_-]+)(?:,\s*p\.\s*(\d+(?:-\d+)?))?\]/)
+      if (citationMatch) {
+        const citeKey = citationMatch[1]
+        const page = citationMatch[2]
+        parts.push(
+          <span
+            key={`cite-${inlineKey++}`}
+            className="inline-flex items-center px-1 py-0.5 rounded cursor-pointer transition-colors"
+            style={{
+              backgroundColor: "rgba(59, 130, 246, 0.08)",
+              color: "#60A5FA",
+              fontSize: "0.85em",
+              border: "1px solid rgba(59, 130, 246, 0.15)",
+            }}
+            onClick={() => onCitationClick?.(citeKey)}
+            title={`Citation: ${citeKey}${page ? `, p. ${page}` : ""}`}
+          >
+            [{citeKey}{page ? `, p. ${page}` : ""}]
+          </span>,
+        )
+        remaining = remaining.slice(citationMatch[0].length)
+        continue
+      }
+
+      // Block ID marker ^block-id (at end of line)
+      const blockIdMatch = remaining.match(/^\s\^([a-z0-9]{4,12})$/)
+      if (blockIdMatch) {
+        parts.push(
+          <span
+            key={`bid-${inlineKey++}`}
+            className="ml-1 text-[9px] align-super select-none"
+            style={{ color: "var(--text-tertiary)", opacity: 0.4 }}
+            title={`Block ID: ${blockIdMatch[1]}`}
+          >
+            ^{blockIdMatch[1]}
+          </span>,
+        )
+        remaining = ""
+        continue
+      }
+
       // Wiki link
       const wikiMatch = remaining.match(/^\[\[([^\]]+)\]\]/)
       if (wikiMatch) {

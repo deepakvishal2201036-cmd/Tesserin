@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
-import { FiFileText, FiCompass, FiCode, FiSettings, FiGrid, FiCalendar, FiChevronsRight, FiChevronsLeft } from "react-icons/fi"
+import { FiFileText, FiCompass, FiCode, FiSettings, FiGrid, FiCalendar, FiClock, FiChevronsRight, FiChevronsLeft } from "react-icons/fi"
 import { HiOutlineCpuChip, HiOutlineSparkles } from "react-icons/hi2"
 import { SkeuoPanel } from "../core/skeuo-panel"
 import { TesserinLogo } from "../core/tesserin-logo"
@@ -26,6 +26,7 @@ const TABS = [
   { id: "code", icon: FiCode, label: "Code" },
   { id: "kanban", icon: FiGrid, label: "Kanban" },
   { id: "daily", icon: FiCalendar, label: "Daily" },
+  { id: "timeline", icon: FiClock, label: "Timeline" },
   { id: "sam", icon: HiOutlineSparkles, label: "SAM" },
   { id: "settings", icon: FiSettings, label: "Settings" },
 ] as const

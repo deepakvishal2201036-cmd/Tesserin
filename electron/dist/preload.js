@@ -68,6 +68,10 @@ const tesserinAPI = {
     ai: {
         chat: (messages, model) => electron_1.ipcRenderer.invoke('ai:chat', messages, model),
         chatStream: (messages, model) => {
+            // Remove any stale listeners from a previous stream BEFORE starting a new one
+            electron_1.ipcRenderer.removeAllListeners('ai:chat:stream:chunk');
+            electron_1.ipcRenderer.removeAllListeners('ai:chat:stream:done');
+            electron_1.ipcRenderer.removeAllListeners('ai:chat:stream:error');
             electron_1.ipcRenderer.send('ai:chat:stream', messages, model);
             return {
                 onChunk: (callback) => {
