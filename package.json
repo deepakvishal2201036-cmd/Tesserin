@@ -1,6 +1,6 @@
 {
   "name": "tesserin",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "description": "Tesserin – AI-native productivity workspace with knowledge graphs, creative canvas, and local-first storage",
   "author": "Anvin <gooseinteandi@gmail.com>",
@@ -10,6 +10,8 @@
     "electron:dev": "tsc -p electron/tsconfig.json && electron .",
     "build": "vite build",
     "electron:build": "tsc -p electron/tsconfig.json && electron-builder",
+    "clean": "rm -rf dist release electron/dist && echo 'Build artifacts cleaned'",
+    "clean:data": "rm -rf \"$HOME/.config/tesserin/tesserin.db\" \"$HOME/.config/tesserin/tesserin.db-shm\" \"$HOME/.config/tesserin/tesserin.db-wal\" \"$HOME/.config/tesserin/Local Storage\" \"$HOME/.config/tesserin/Session Storage\" && echo 'User data reset'",
     "mcp": "tsc -p electron/tsconfig.json && node electron/dist/main.js --mcp",
     "postinstall": "electron-builder install-app-deps",
     "lint": "eslint ."
@@ -23,6 +25,12 @@
     "files": [
       "dist/**/*",
       "electron/dist/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",
