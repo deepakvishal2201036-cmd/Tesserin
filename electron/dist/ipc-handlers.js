@@ -37,6 +37,7 @@ exports.registerIpcHandlers = registerIpcHandlers;
 const electron_1 = require("electron");
 const db = __importStar(require("./database"));
 const ai = __importStar(require("./ai-service"));
+const mcp_client_1 = require("./mcp-client");
 /**
  * Register all IPC handlers for the Tesserin app.
  * Called once from main.ts during app initialization.
@@ -112,6 +113,35 @@ function registerIpcHandlers() {
     });
     electron_1.ipcMain.handle('ai:listModels', async () => {
         return ai.listModels();
+    });
+    // ── MCP (Model Context Protocol) ──────────────────────────────
+    electron_1.ipcMain.handle('mcp:connect', async (_e, config) => {
+        await mcp_client_1.mcpClientManager.connect(config);
+        const tools = mcp_client_1.mcpClientManager.getServerTools(config.id);
+        const statuses = mcp_client_1.mcpClientManager.getStatuses();
+        const status = statuses.find(s => s.serverId === config.id);
+        return {
+            status: status || { serverId: config.id, serverName: config.name, status: 'error', toolCount: 0 },
+            tools,
+        };
+    });
+    electron_1.ipcMain.handle('mcp:disconnect', async (_e, serverId) => {
+        await mcp_client_1.mcpClientManager.disconnect(serverId);
+    });
+    electron_1.ipcMain.handle('mcp:callTool', async (_e, serverId, toolName, args) => {
+        return mcp_client_1.mcpClientManager.callTool(serverId, toolName, args);
+    });
+    electron_1.ipcMain.handle('mcp:getStatuses', async () => {
+        return {
+            statuses: mcp_client_1.mcpClientManager.getStatuses(),
+            tools: mcp_client_1.mcpClientManager.getAllTools(),
+        };
+    });
+    electron_1.ipcMain.handle('mcp:getTools', async () => {
+        return mcp_client_1.mcpClientManager.getAllTools();
+    });
+    electron_1.ipcMain.handle('mcp:getServerTools', async (_e, serverId) => {
+        return mcp_client_1.mcpClientManager.getServerTools(serverId);
     });
 }
 //# sourceMappingURL=ipc-handlers.js.map

@@ -7,8 +7,16 @@ const electron_1 = require("electron");
 const path_1 = __importDefault(require("path"));
 const ipc_handlers_1 = require("./ipc-handlers");
 const database_1 = require("./database");
+const mcp_server_1 = require("./mcp-server");
 // Determine if we're in development mode
 const isDev = process.env.NODE_ENV === 'development' || !electron_1.app.isPackaged;
+// If launched with --mcp flag, run as MCP server on stdio and exit
+if (process.argv.includes('--mcp')) {
+    (0, mcp_server_1.startMcpServerStdio)().catch((err) => {
+        console.error('[Tesserin] Failed to start MCP server:', err);
+        process.exit(1);
+    });
+}
 let mainWindow = null;
 function createWindow() {
     mainWindow = new electron_1.BrowserWindow({
@@ -33,7 +41,7 @@ function createWindow() {
         mainWindow.webContents.openDevTools({ mode: 'detach' });
     }
     else {
-        mainWindow.loadFile(path_1.default.join(__dirname, '../dist/index.html'));
+        mainWindow.loadFile(path_1.default.join(__dirname, '../../dist/index.html'));
     }
     mainWindow.on('closed', () => {
         mainWindow = null;

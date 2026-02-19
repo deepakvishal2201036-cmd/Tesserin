@@ -103,6 +103,15 @@ const tesserinAPI = {
         close: () => electron_1.ipcRenderer.send('window:close'),
         isMaximized: () => electron_1.ipcRenderer.invoke('window:isMaximized'),
     },
+    // ── MCP (Model Context Protocol) ──────────────────────────────────
+    mcp: {
+        connect: (config) => electron_1.ipcRenderer.invoke('mcp:connect', config),
+        disconnect: (serverId) => electron_1.ipcRenderer.invoke('mcp:disconnect', serverId),
+        callTool: (serverId, toolName, args) => electron_1.ipcRenderer.invoke('mcp:callTool', serverId, toolName, args),
+        getStatuses: () => electron_1.ipcRenderer.invoke('mcp:getStatuses'),
+        getTools: () => electron_1.ipcRenderer.invoke('mcp:getTools'),
+        getServerTools: (serverId) => electron_1.ipcRenderer.invoke('mcp:getServerTools', serverId),
+    },
 };
 electron_1.contextBridge.exposeInMainWorld('tesserin', tesserinAPI);
 //# sourceMappingURL=preload.js.map

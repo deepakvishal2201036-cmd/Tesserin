@@ -110,6 +110,23 @@ declare const tesserinAPI: {
         close: () => void;
         isMaximized: () => Promise<any>;
     };
+    mcp: {
+        connect: (config: {
+            id: string;
+            name: string;
+            transport: "stdio" | "sse";
+            command?: string;
+            args?: string[];
+            env?: Record<string, string>;
+            url?: string;
+            enabled: boolean;
+        }) => Promise<any>;
+        disconnect: (serverId: string) => Promise<any>;
+        callTool: (serverId: string, toolName: string, args: Record<string, unknown>) => Promise<any>;
+        getStatuses: () => Promise<any>;
+        getTools: () => Promise<any>;
+        getServerTools: (serverId: string) => Promise<any>;
+    };
 };
 export type TesserinAPI = typeof tesserinAPI;
 export {};

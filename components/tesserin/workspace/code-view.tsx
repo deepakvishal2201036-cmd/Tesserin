@@ -1,6 +1,16 @@
 "use client"
 import React, { useState, useEffect, useCallback, useRef } from "react"
-import mermaid from "mermaid"
+import type mermaidAPI from "mermaid"
+
+// Lazy-load mermaid to avoid circular dependency TDZ crash in production build
+let mermaidInstance: typeof mermaidAPI | null = null
+async function getMermaid() {
+  if (!mermaidInstance) {
+    const mod = await import("mermaid")
+    mermaidInstance = mod.default
+  }
+  return mermaidInstance
+}
 import {
   FiPlay, FiCpu, FiLayout, FiDownload, FiMaximize, FiCode, FiRefreshCw, FiCheck, FiCommand,
   FiActivity, FiClock, FiDatabase, FiMap, FiPieChart, FiGitCommit, FiUsers, FiList, FiGrid, FiTrendingUp, FiImage
@@ -228,26 +238,28 @@ export function CodeView() {
 
   // Initialize mermaid or update theme
   useEffect(() => {
-    mermaid.initialize({
-      startOnLoad: true,
-      theme: 'base',
-      themeVariables: {
-        primaryColor: '#eab308', // accent-primary (yellow)
-        primaryTextColor: isDark ? '#ededed' : '#1a1c20',
-        primaryBorderColor: '#ca8a04',
-        lineColor: isDark ? '#888888' : '#94a3b8',
-        secondaryColor: '#f59e0b',
-        tertiaryColor: isDark ? '#111111' : '#fff',
-        mainBkg: isDark ? '#050505' : '#ffffff', // Match --bg-app (Obsidian)
-        nodeBorder: '#eab308',
-      },
-      securityLevel: 'loose',
-      fontFamily: 'inherit'
-    })
+    getMermaid().then((m) => {
+      m.initialize({
+        startOnLoad: true,
+        theme: 'base',
+        themeVariables: {
+          primaryColor: '#eab308', // accent-primary (yellow)
+          primaryTextColor: isDark ? '#ededed' : '#1a1c20',
+          primaryBorderColor: '#ca8a04',
+          lineColor: isDark ? '#888888' : '#94a3b8',
+          secondaryColor: '#f59e0b',
+          tertiaryColor: isDark ? '#111111' : '#fff',
+          mainBkg: isDark ? '#050505' : '#ffffff', // Match --bg-app (Obsidian)
+          nodeBorder: '#eab308',
+        },
+        securityLevel: 'loose',
+        fontFamily: 'inherit'
+      })
 
-    // Force re-render when theme changes
-    setCode(prev => prev + " ")
-    setTimeout(() => setCode(prev => prev.trim()), 10)
+      // Force re-render when theme changes
+      setCode(prev => prev + " ")
+      setTimeout(() => setCode(prev => prev.trim()), 10)
+    })
   }, [isDark])
 
   // Render diagram
@@ -261,7 +273,8 @@ export function CodeView() {
         const id = `mermaid-${Date.now()}`
 
         try {
-          const { svg } = await mermaid.render(id, code)
+          const m = await getMermaid()
+          const { svg } = await m.render(id, code)
           containerRef.current.innerHTML = svg
           setError(null)
         } catch (renderError) {
