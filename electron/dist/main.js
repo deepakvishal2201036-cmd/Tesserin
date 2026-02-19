@@ -10,6 +10,24 @@ const database_1 = require("./database");
 const mcp_server_1 = require("./mcp-server");
 // Determine if we're in development mode
 const isDev = process.env.NODE_ENV === 'development' || !electron_1.app.isPackaged;
+// Resolve icon path — in dev it's at project root, in production it's in resources/
+function resolveIconPath() {
+    if (isDev) {
+        return path_1.default.join(__dirname, '../../build/icon.png');
+    }
+    // On macOS the app icon is embedded in the .app bundle; no runtime icon needed
+    if (process.platform === 'darwin') {
+        return path_1.default.join(process.resourcesPath, 'icon.png');
+    }
+    // On Windows, prefer .ico for sharp rendering in taskbar/alt-tab
+    if (process.platform === 'win32') {
+        const icoPath = path_1.default.join(process.resourcesPath, 'icon.png');
+        return icoPath;
+    }
+    // Linux
+    return path_1.default.join(process.resourcesPath, 'icon.png');
+}
+const iconPath = resolveIconPath();
 // If launched with --mcp flag, run as MCP server on stdio and exit
 if (process.argv.includes('--mcp')) {
     (0, mcp_server_1.startMcpServerStdio)().catch((err) => {
@@ -28,6 +46,7 @@ function createWindow() {
         titleBarStyle: 'hiddenInset',
         trafficLightPosition: { x: 16, y: 16 },
         backgroundColor: '#050505',
+        icon: electron_1.nativeImage.createFromPath(iconPath),
         webPreferences: {
             preload: path_1.default.join(__dirname, 'preload.js'),
             contextIsolation: true,

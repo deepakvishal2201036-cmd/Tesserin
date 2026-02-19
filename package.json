@@ -32,10 +32,11 @@
         "to": "icon.png"
       }
     ],
+    "icon": "build/icons",
     "mac": {
       "category": "public.app-category.productivity",
       "target": "dmg",
-      "icon": "build/icon.png"
+      "icon": "build/icon.icns"
     },
     "win": {
       "target": "nsis",
@@ -47,9 +48,8 @@
         "deb"
       ],
       "category": "Office",
-      "icon": "build/icon.png"
-    },
-    "icon": "build/icon.png"
+      "icon": "build/icons"
+    }
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.0",

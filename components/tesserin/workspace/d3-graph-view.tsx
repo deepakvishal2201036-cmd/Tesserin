@@ -11,6 +11,7 @@ import {
   FiTarget,
 } from "react-icons/fi"
 import { useNotes, type GraphNode, type GraphLink } from "@/lib/notes-store"
+import { TesserinLogo } from "../core/tesserin-logo"
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
@@ -804,6 +805,9 @@ export function D3GraphView() {
         }}
       >
         <div className="flex items-center gap-3">
+          {/* Brand mark */}
+          <TesserinLogo size={22} animated={false} />
+
           {/* Skeuomorphic mode selector — button group */}
           <div className="flex items-center gap-1.5">
             {MODES.map((m) => (
@@ -880,13 +884,14 @@ export function D3GraphView() {
 
         {/* Active mode HUD */}
         <div
-          className="absolute top-4 left-4 skeuo-panel px-4 py-2 text-[10px] font-mono pointer-events-none select-none"
+          className="absolute top-4 left-4 skeuo-panel px-4 py-2 text-[10px] font-mono pointer-events-none select-none flex items-center gap-2"
           style={{
             color: "var(--accent-primary)",
             opacity: 0.6,
             letterSpacing: "0.05em",
           }}
         >
+          <TesserinLogo size={16} animated={false} />
           MODE: {mode.toUpperCase()} | PHYSICS:{" "}
           {mode === "force" ? "ACTIVE" : "STATIC"}
         </div>
