@@ -429,7 +429,12 @@ export function CreativeCanvas({ onSplitOpen }: { onSplitOpen?: () => void } = {
   // This eliminates the "blank flash" and "stuck" behaviour between canvas tabs.
   useEffect(() => {
     if (!activeCanvasId) {
-      setIsTransitioning(false)
+      // Keep the dark overlay while the canvas list is still being fetched.
+      // Dropping it early would expose Excalidraw's default light-mode render
+      // before the first canvas is selected and its dark appState applied.
+      if (!canvasListLoading) {
+        setIsTransitioning(false)
+      }
       readyToSave.current = false
       return
     }
@@ -506,7 +511,7 @@ export function CreativeCanvas({ onSplitOpen }: { onSplitOpen?: () => void } = {
     loadCanvas()
 
     return () => { cancelled = true }
-  }, [activeCanvasId])
+  }, [activeCanvasId, canvasListLoading])
 
   // ── Immediate save helper (non-debounced) ──────────────────────
   const saveNow = useCallback(() => {
@@ -1076,7 +1081,14 @@ export function CreativeCanvas({ onSplitOpen }: { onSplitOpen?: () => void } = {
       <Excalidraw
         key="tesserin-excalidraw"
         excalidrawAPI={onAPI}
-        initialData={libraryInitData ? { elements: [], appState: { theme: isDark ? "dark" : "light" }, libraryItems: libraryInitData } : undefined}
+        initialData={{
+          elements: [],
+          appState: {
+            theme: isDark ? "dark" : "light",
+            viewBackgroundColor: isDark ? DARK_BG : LIGHT_BG,
+          },
+          ...(libraryInitData ? { libraryItems: libraryInitData } : {}),
+        }}
         onChange={onChange}
         onLibraryChange={onLibraryChange}
         UIOptions={{
