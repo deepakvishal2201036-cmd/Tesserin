@@ -15,7 +15,6 @@ import { useCanvasStore } from "@/lib/canvas-store"
 import { setExcalidrawAPI } from "@/lib/canvas-store"
 import { excalidrawId } from "@/lib/canvas-elements"
 import { generateDiagram, type DiagramType } from "@/lib/diagram-ai"
-import { parseMermaid } from "@/lib/mermaid-to-excalidraw"
 import { CanvasTabBar } from "./canvas-tab-bar"
 import { CanvasAIDialog } from "./canvas-ai-dialog"
 import { FiFileText, FiX, FiColumns } from "react-icons/fi"
@@ -722,33 +721,14 @@ export function CreativeCanvas({ onSplitOpen }: { onSplitOpen?: () => void } = {
 
   // ── AI diagram generation handler ─────────────────────────────
   const handleAIGenerate = useCallback(
-    async (prompt: string, type: DiagramType, mermaidCode?: string) => {
+    async (prompt: string, type: DiagramType) => {
       setIsGenerating(true)
       try {
-        let elements: any[]
-
-        if (type === "mermaid" || mermaidCode?.trim()) {
-          // Use provided Mermaid code directly, or ask AI to write it
-          let code = mermaidCode?.trim() ?? ""
-          if (!code) {
-            const { generateMermaidCode } = await import("@/lib/diagram-ai")
-            code = await generateMermaidCode(prompt, "auto")
-          }
-          const pos = aiInsertPos.current ?? { x: 100, y: 100 }
-          const result = parseMermaid(code, isDark, pos.x, pos.y)
-          if (result.error || result.elements.length === 0) {
-            throw new Error(result.error ?? "No elements generated from Mermaid code")
-          }
-          elements = result.elements
-        } else {
-          const result = await generateDiagram(prompt, type, aiInsertPos.current, isDark)
-          elements = result.elements
-        }
-
+        const result = await generateDiagram(prompt, type, aiInsertPos.current, isDark)
         const api = apiRef.current
-        if (api && elements.length > 0) {
+        if (api && result.elements.length > 0) {
           const existing = api.getSceneElements()
-          api.updateScene({ elements: [...existing, ...elements] })
+          api.updateScene({ elements: [...existing, ...result.elements] })
           readyToSave.current && saveNowRef.current?.()
         }
         setShowAIDialog(false)

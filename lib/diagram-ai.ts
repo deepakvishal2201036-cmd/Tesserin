@@ -33,7 +33,6 @@ export type DiagramType =
   | "orgchart"
   | "sequence"
   | "freeform"
-  | "mermaid"
   | "auto"
 
 interface GenerateResult {

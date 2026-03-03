@@ -7,7 +7,7 @@ import type { DiagramType } from "@/lib/diagram-ai"
 interface CanvasAIDialogProps {
   isOpen: boolean
   onClose: () => void
-  onGenerate: (prompt: string, type: DiagramType, mermaidCode?: string) => Promise<void>
+  onGenerate: (prompt: string, type: DiagramType) => Promise<void>
   isGenerating: boolean
 }
 
@@ -18,7 +18,6 @@ const DIAGRAM_TYPES: Array<{ value: DiagramType; label: string; icon: string; de
   { value: "orgchart", label: "Org", icon: "🏢", desc: "Hierarchy" },
   { value: "sequence", label: "Seq", icon: "↔️", desc: "Interactions" },
   { value: "freeform", label: "Free", icon: "✏️", desc: "Custom shapes" },
-  { value: "mermaid", label: "Mermaid", icon: "📊", desc: "Code → canvas" },
 ]
 
 export function CanvasAIDialog({
@@ -29,7 +28,6 @@ export function CanvasAIDialog({
 }: CanvasAIDialogProps) {
   const [prompt, setPrompt] = useState("")
   const [selectedType, setSelectedType] = useState<DiagramType>("auto")
-  const [mermaidCode, setMermaidCode] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -48,18 +46,13 @@ export function CanvasAIDialog({
   }, [isOpen, onClose])
 
   const handleSubmit = async () => {
-    const hasMermaid = selectedType === "mermaid" && mermaidCode.trim()
-    if ((!prompt.trim() && !hasMermaid) || isGenerating) return
-    await onGenerate(prompt.trim(), selectedType, mermaidCode.trim() || undefined)
+    if (!prompt.trim() || isGenerating) return
+    await onGenerate(prompt.trim(), selectedType)
     setPrompt("")
     setSelectedType("auto")
-    setMermaidCode("")
   }
 
-  const canSubmit = !isGenerating && (
-    prompt.trim().length > 0 ||
-    (selectedType === "mermaid" && mermaidCode.trim().length > 0)
-  )
+  const canSubmit = !isGenerating && prompt.trim().length > 0
 
   if (!isOpen) return null
 
@@ -215,33 +208,6 @@ export function CanvasAIDialog({
             </div>
           </div>
 
-          {/* Mermaid Code Editor — shown only when Mermaid type selected */}
-          {selectedType === "mermaid" && (
-            <div>
-              <label
-                className="text-[11px] font-semibold uppercase tracking-wider mb-1.5 block"
-                style={{ color: "var(--text-tertiary)" }}
-              >
-                Mermaid Code
-                <span
-                  className="ml-1.5 normal-case tracking-normal font-normal"
-                  style={{ color: "var(--text-tertiary)", opacity: 0.6 }}
-                >
-                  (optional — leave blank to let AI write it)
-                </span>
-              </label>
-              <textarea
-                value={mermaidCode}
-                onChange={(e) => setMermaidCode(e.target.value)}
-                rows={6}
-                className="skeuo-inset w-full px-3.5 py-2.5 text-xs font-mono resize-none focus:outline-none"
-                style={{ color: "var(--text-primary)" }}
-                placeholder={"flowchart TD\n  A[Start] --> B{Decision}\n  B -->|Yes| C[Do it]\n  B -->|No| D[Skip]"}
-                disabled={isGenerating}
-                spellCheck={false}
-              />
-            </div>
-          )}
         </div>
 
         {/* Footer — embossed bar */}
