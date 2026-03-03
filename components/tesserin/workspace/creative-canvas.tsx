@@ -430,7 +430,7 @@ export function CreativeCanvas({ onSplitOpen }: { onSplitOpen?: () => void } = {
   useEffect(() => {
     if (!activeCanvasId) {
       // Keep the dark overlay while the canvas list is still being fetched.
-      // Dropping it early would expose Excalidraw's default light-mode render
+      // Dropping it early would expose Excalidraw's default light render
       // before the first canvas is selected and its dark appState applied.
       if (!canvasListLoading) {
         setIsTransitioning(false)
@@ -1081,14 +1081,7 @@ export function CreativeCanvas({ onSplitOpen }: { onSplitOpen?: () => void } = {
       <Excalidraw
         key="tesserin-excalidraw"
         excalidrawAPI={onAPI}
-        initialData={{
-          elements: [],
-          appState: {
-            theme: isDark ? "dark" : "light",
-            viewBackgroundColor: isDark ? DARK_BG : LIGHT_BG,
-          },
-          ...(libraryInitData ? { libraryItems: libraryInitData } : {}),
-        }}
+        initialData={libraryInitData ? { elements: [], appState: { theme: isDark ? "dark" : "light" }, libraryItems: libraryInitData } : undefined}
         onChange={onChange}
         onLibraryChange={onLibraryChange}
         UIOptions={{
