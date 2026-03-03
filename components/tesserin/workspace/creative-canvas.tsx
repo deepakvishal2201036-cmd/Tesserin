@@ -1081,7 +1081,11 @@ export function CreativeCanvas({ onSplitOpen }: { onSplitOpen?: () => void } = {
       <Excalidraw
         key="tesserin-excalidraw"
         excalidrawAPI={onAPI}
-        initialData={libraryInitData ? { elements: [], appState: { theme: isDark ? "dark" : "light" }, libraryItems: libraryInitData } : undefined}
+        initialData={{
+          elements: [],
+          appState: { theme: isDark ? "dark" : "light" },
+          ...(libraryInitData ? { libraryItems: libraryInitData } : {})
+        }}
         onChange={onChange}
         onLibraryChange={onLibraryChange}
         UIOptions={{
