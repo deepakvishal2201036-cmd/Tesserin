@@ -15,7 +15,8 @@ about:
   icon: https://avatars.githubusercontent.com/u/AnvinX1?s=200&v=4
 source:
   project: https://github.com/AnvinX1/Tesserin-pro
-  commit: d322e77257f3a46a8c9375a5235fdd43f46f5d0e
+  commit: 2c21bce4b3dae418a9e9a3da8c68641b357288e9
+  dockerfile: tesserin-mcp-server/Dockerfile
 config:
   description: Configure connection to your local Tesserin vault
   secrets:
