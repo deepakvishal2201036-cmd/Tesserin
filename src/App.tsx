@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, Component, type ErrorInfo, type ReactNode } from "react"
+import React, { useState, useEffect, useCallback, useMemo, useRef, Component, type ErrorInfo, type ReactNode } from "react"
 
 // Core
 import { TesserinThemeProvider } from "@/components/tesserin/core/theme-provider"
@@ -105,6 +105,7 @@ function AppContent() {
     const [showReferences, setShowReferences] = useState(false)
     const [showQuickCapture, setShowQuickCapture] = useState(false)
     const [notice, setNotice] = useState<{ message: string; visible: boolean }>({ message: "", visible: false })
+    const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const { notes, selectedNoteId, selectNote, addNote, updateNote, isLoading } = useNotes()
 
     // Onboarding — shown once when vault is empty
@@ -191,8 +192,18 @@ function AppContent() {
 
     // Plugin notice handler
     const handleNotice = useCallback((message: string, duration = 3000) => {
+        if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current)
         setNotice({ message, visible: true })
-        setTimeout(() => setNotice(prev => ({ ...prev, visible: false })), duration)
+        noticeTimerRef.current = setTimeout(() => {
+            setNotice(prev => ({ ...prev, visible: false }))
+        }, duration)
+    }, [])
+
+    // Cleanup notice timer on unmount
+    useEffect(() => {
+        return () => {
+            if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current)
+        }
     }, [])
 
     // Startup tip — show one random tip 3s after first render
