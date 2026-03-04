@@ -97,6 +97,21 @@ class ErrorBoundary extends Component<EBProps, EBState> {
 function AppContent() {
     const [activeTab, setActiveTab] = useState<TabId>("graph")
     const [showNotes, setShowNotes] = useState(true)
+
+    // Clicking the Notes tab while already on it re-opens the sidebar if closed.
+    // Switching to Notes from another tab always shows the sidebar.
+    const handleSetActiveTab = useCallback((tab: TabId) => {
+        if (tab === "notes") {
+            if (activeTab === "notes") {
+                setShowNotes(prev => !prev)
+            } else {
+                setActiveTab(tab)
+                setShowNotes(true)
+            }
+        } else {
+            setActiveTab(tab)
+        }
+    }, [activeTab])
     const [showSearch, setShowSearch] = useState(false)
     const [showExport, setShowExport] = useState(false)
     const [showTemplates, setShowTemplates] = useState(false)
@@ -334,7 +349,7 @@ function AppContent() {
                     {/* ── Left Dock ── */}
                     <LeftDock
                         activeTab={activeTab}
-                        setActiveTab={setActiveTab}
+                        setActiveTab={handleSetActiveTab}
                         splitActive={splitState.isActive}
                         onSplitOpen={() => openSplit()}
                         onSplitClose={closeSplit}

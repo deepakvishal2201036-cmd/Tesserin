@@ -171,7 +171,7 @@ export function LeftDock({
                 {expanded && (
                   <span
                     className="text-sm font-medium whitespace-nowrap overflow-hidden"
-                    style={{ color: isActive ? "var(--accent-primary)" : "var(--text-secondary)" }}
+                    style={{ color: isActive ? "var(--text-on-accent)" : "var(--text-secondary)" }}
                   >
                     {item.label}
                   </span>
