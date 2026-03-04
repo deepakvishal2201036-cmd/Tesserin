@@ -64,9 +64,40 @@ export function MarkdownEditor({ noteId: propsNoteId, onSelectNote, isSecondary 
     graph,
   } = useNotes()
 
-  // Use prop noteId if explicitly provided (secondary pane), otherwise global
-  const effectiveNoteId = propsNoteId !== undefined ? propsNoteId : selectedNoteId
-  const effectiveSelectNote = onSelectNote || selectNote
+  // Secondary pane tracks its own selected note locally so it never
+  // touches the global selectedNoteId used by the primary pane.
+  const [secondaryNoteId, setSecondaryNoteId] = useState<string | null>(propsNoteId ?? null)
+  // Sync when the parent explicitly changes the prop (e.g. opening a link in split)
+  useEffect(() => {
+    if (isSecondary && propsNoteId !== undefined) setSecondaryNoteId(propsNoteId)
+  }, [isSecondary, propsNoteId])
+
+  const effectiveNoteId = isSecondary
+    ? (secondaryNoteId ?? propsNoteId ?? null)
+    : (propsNoteId !== undefined ? propsNoteId : selectedNoteId)
+
+  // For the secondary pane, note selection stays local;
+  // for the primary pane, fall back to global selectNote.
+  const effectiveSelectNote = useCallback((id: string) => {
+    if (isSecondary) {
+      setSecondaryNoteId(id)
+      onSelectNote?.(id)
+    } else {
+      (onSelectNote || selectNote)(id)
+    }
+  }, [isSecondary, onSelectNote, selectNote])
+
+  // Intercept addNote for secondary pane: create the note but select it
+  // only within this pane — pass autoSelect=false so the global selectedNoteId
+  // (which drives the primary pane) is never touched.
+  const handleAddNote = useCallback(() => {
+    if (isSecondary) {
+      const id = addNote(undefined, undefined, undefined, false)
+      setSecondaryNoteId(id)
+    } else {
+      addNote() // default autoSelect=true, handled inside the store
+    }
+  }, [addNote, isSecondary])
 
   const [viewMode, setViewMode] = useState<"edit" | "preview" | "split">("split")
   const [showNoteList, setShowNoteList] = useState(false)
@@ -155,7 +186,7 @@ export function MarkdownEditor({ noteId: propsNoteId, onSelectNote, isSecondary 
             </span>
           </div>
           <button
-            onClick={() => addNote()}
+            onClick={handleAddNote}
             className="skeuo-btn flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold"
           >
             <FiPlus size={13} />
@@ -179,7 +210,7 @@ export function MarkdownEditor({ noteId: propsNoteId, onSelectNote, isSecondary 
               Pick a note from the sidebar or graph, or start fresh with a new one.
             </p>
             <button
-              onClick={() => addNote()}
+              onClick={handleAddNote}
               className="skeuo-btn px-5 py-2.5 rounded-xl text-sm font-semibold"
             >
               <FiPlus size={14} className="inline mr-1.5" />
@@ -315,7 +346,7 @@ export function MarkdownEditor({ noteId: propsNoteId, onSelectNote, isSecondary 
         {/* Actions */}
         <div className="flex items-center gap-0.5 ml-1">
           <button
-            onClick={() => addNote()}
+            onClick={handleAddNote}
             className="skeuo-btn w-7 h-7 flex items-center justify-center rounded-lg"
             aria-label="New note"
           >

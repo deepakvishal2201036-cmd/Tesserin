@@ -169,22 +169,32 @@ function AppContent() {
 
     // Render callback for universal panes
     const renderView = useCallback((viewType: string, props: PaneRenderProps) => { // eslint-disable-line react-hooks/exhaustive-deps
+        const key = `${props.paneId}-${viewType}`
         switch (viewType) {
             case "notes":
-                return <MarkdownEditor noteId={props.noteId} onSelectNote={props.onSelectNote} isSecondary={props.isSecondary} />
+                return <MarkdownEditor
+                    key={key}
+                    noteId={props.noteId}
+                    onSelectNote={props.isSecondary ? setSecondaryNote : props.onSelectNote}
+                    isSecondary={props.isSecondary}
+                />
             case "canvas":
-                return <CreativeCanvas onSplitOpen={splitState.isActive ? undefined : () => openSplit("canvas")} />
+                return <CreativeCanvas
+                    key={key}
+                    paneId={props.paneId}
+                    onSplitOpen={splitState.isActive ? undefined : () => openSplit("canvas")}
+                />
             case "graph":
-                return <D3GraphView />
+                return <D3GraphView key={key} />
             case "settings":
-                return <SettingsPanel />
+                return <SettingsPanel key={key} />
             default: {
                 const panel = panels.find((p) => p.location === "workspace" && p.id === viewType)
-                if (panel) return <panel.component />
+                if (panel) return <panel.component key={key} />
                 return null
             }
         }
-    }, [panels, splitState.isActive, openSplit])
+    }, [panels, splitState.isActive, openSplit, setSecondaryNote])
 
     // Feature toggles — control which features are shown
     const [features, setFeatures] = useState<Record<string, boolean>>({})

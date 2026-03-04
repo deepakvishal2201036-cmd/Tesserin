@@ -270,7 +270,7 @@ function NotePickerPanel({
 
 /* ── component ───────────────────────────────────────────── */
 
-export function CreativeCanvas({ onSplitOpen }: { onSplitOpen?: () => void } = {}) {
+export function CreativeCanvas({ onSplitOpen, paneId = "primary" }: { onSplitOpen?: () => void; paneId?: string } = {}) {
   const { isDark } = useTesserinTheme()
   const { notes } = useNotes()
   const {
@@ -651,7 +651,8 @@ export function CreativeCanvas({ onSplitOpen }: { onSplitOpen?: () => void } = {
 
   const onAPI = useCallback((api: any) => {
     apiRef.current = api
-    setExcalidrawAPI(api) // Share with canvas export dialog
+    // Only the primary pane owns the global export API reference
+    if (paneId === "primary") setExcalidrawAPI(api)
     // If canvas data finished loading before Excalidraw was ready, apply it now
     if (pendingSceneRef.current) {
       api.updateScene(pendingSceneRef.current)
