@@ -207,8 +207,15 @@ function registerIpcHandlers() {
     electron_1.ipcMain.handle('db:templates:delete', (_e, id) => db.deleteTemplate(validateId(id, 'id')));
     // ── Settings ──────────────────────────────────────────────────────
     electron_1.ipcMain.handle('db:settings:get', (_e, key) => db.getSetting(requireString(key, 'key')));
-    electron_1.ipcMain.handle('db:settings:set', (_e, key, value) => db.setSetting(requireString(key, 'key'), requireString(value, 'value')));
+    electron_1.ipcMain.handle('db:settings:set', (_e, key, value) => {
+        // key must be non-empty; value may be an empty string (e.g. clearing an API key)
+        const k = requireString(key, 'key');
+        if (typeof value !== 'string')
+            throw new Error(`Invalid parameter "value": expected string`);
+        return db.setSetting(k, value);
+    });
     electron_1.ipcMain.handle('db:settings:getAll', () => db.getAllSettings());
+    electron_1.ipcMain.handle('db:clear', () => db.clearAllData());
     // ── Canvases ──────────────────────────────────────────────────────
     electron_1.ipcMain.handle('db:canvases:list', () => db.listCanvases());
     electron_1.ipcMain.handle('db:canvases:get', (_e, id) => db.getCanvas(validateId(id, 'id')));
