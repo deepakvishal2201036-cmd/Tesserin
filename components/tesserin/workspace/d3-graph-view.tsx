@@ -6,6 +6,7 @@ import { FiZoomIn, FiZoomOut, FiMaximize, FiActivity, FiGitBranch, FiTarget, FiP
 import { useNotes, type GraphNode, type GraphLink } from "@/lib/notes-store"
 import { TesserinLogo } from "../core/tesserin-logo"
 import { TesseradrawLogo } from "./tesseradraw-logo"
+import "@excalidraw/excalidraw/index.css"
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
