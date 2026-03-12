@@ -96,7 +96,8 @@
     "linux": {
       "target": [
         "AppImage",
-        "deb"
+        "deb",
+        "pacman"
       ],
       "category": "Office",
       "icon": "build/icons"

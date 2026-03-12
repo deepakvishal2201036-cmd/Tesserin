@@ -318,14 +318,22 @@ export function CreativeCanvas({ onSplitOpen, paneId = "primary" }: { onSplitOpe
   const apiRef = useRef<any>(null)
   const canvasIdRef = useRef<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Holds the latest scene data reported by Excalidraw's onChange callback.
+   *  All save paths read from this ref instead of calling api.getSceneElements()
+   *  which can return stale/empty data in some Excalidraw versions. */
+  const latestSceneRef = useRef<{ elements: readonly any[]; appState: Record<string, any>; files: Record<string, any> } | null>(null)
   /** True while loading canvas data — shows a solid overlay so no blank/stale-scene flash */
   const [isTransitioning, setIsTransitioning] = useState(true)
   const readyToSave = useRef(false)
   /** Full-board mode — uses native Fullscreen API for zero-glitch takeover */
   const [isFullscreen, setIsFullscreen] = useState(false)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
-  /** Canvas scene queued when data loads before Excalidraw's onAPI fires (first-mount race) */
-  const pendingSceneRef = useRef<{ elements: any[]; appState: any; files?: any } | null>(null)
+  /** Whether Excalidraw can be rendered — gated until the first canvas data loads
+   *  so that initialData includes the real elements (avoids the onAPI/updateScene
+   *  race where Excalidraw's internal React tree isn't mounted yet). */
+  const [excalidrawReady, setExcalidrawReady] = useState(false)
+  /** Scene data to pass as Excalidraw's initialData on first mount. */
+  const initialSceneRef = useRef<{ elements: any[]; appState: any; files?: any } | null>(null)
   /** Tracks the last canvas ID that was fully loaded — prevents spurious reloads when only canvasListLoading toggles */
   const lastLoadedCanvasRef = useRef<string | null>(null)
   /** Library items read once on mount for Excalidraw's initialData (shared across canvases) */
@@ -602,9 +610,13 @@ export function CreativeCanvas({ onSplitOpen, paneId = "primary" }: { onSplitOpe
         apiRef.current.history.clear()
         setIsTransitioning(false)
       } else {
-        // Excalidraw not yet mounted on first render — queue for onAPI
-        pendingSceneRef.current = sceneData
-        // overlay stays until onAPI processes pendingSceneRef
+        // First mount — supply data via initialData prop so Excalidraw
+        // renders with the correct elements from the start. This avoids
+        // the race where excalidrawAPI fires before Excalidraw's internal
+        // React tree is mounted (updateScene would be a silent no-op).
+        initialSceneRef.current = sceneData
+        setExcalidrawReady(true)
+        setIsTransitioning(false)
       }
 
       setTimeout(() => { readyToSave.current = true }, 800)
@@ -614,117 +626,87 @@ export function CreativeCanvas({ onSplitOpen, paneId = "primary" }: { onSplitOpe
     return () => { cancelled = true }
   }, [activeCanvasId, canvasListLoading])
 
+  // ── Core save logic (used by both saveNow and doSave) ──────────
+  const flushToStorage = useCallback((canvasId: string) => {
+    const scene = latestSceneRef.current
+    if (!scene || scene.elements.length === 0) return // nothing to save
+
+    const persistAppState: Record<string, any> = {}
+    for (const key of PERSIST_APP_STATE_KEYS) {
+      if (key in scene.appState) persistAppState[key] = scene.appState[key]
+    }
+
+    const elementsJson = JSON.stringify(scene.elements)
+    const appStateJson = JSON.stringify(persistAppState)
+    const filesJson = JSON.stringify(scene.files)
+
+    // Always write to localStorage as immediate backup
+    try {
+      const lsKey = `tesserin:canvas:${canvasId}`
+      const existing = localStorage.getItem(lsKey)
+      const canvas = existing ? JSON.parse(existing) : {
+        id: canvasId,
+        name: "Canvas",
+        files: "{}",
+        created_at: new Date().toISOString(),
+      }
+      canvas.elements = elementsJson
+      canvas.app_state = appStateJson
+      canvas.files = filesJson
+      canvas.updated_at = new Date().toISOString()
+      localStorage.setItem(lsKey, JSON.stringify(canvas))
+    } catch (err) {
+      console.warn("[Tesserin] localStorage canvas save failed:", err)
+    }
+
+    // Also fire async IPC save
+    storage.updateCanvas(canvasId, {
+      elements: elementsJson,
+      appState: appStateJson,
+      files: filesJson,
+    }).catch((err) => {
+      console.warn("[Tesserin] IPC canvas save failed:", err)
+    })
+
+    // Bump updated time in canvas list
+    touchCanvas(canvasId)
+  }, [touchCanvas])
+
   // ── Immediate save helper (non-debounced) ──────────────────────
   const saveNow = useCallback(() => {
-    const api = apiRef.current
-    if (!api || !readyToSave.current) return
-
+    if (!readyToSave.current) return
+    const canvasId = canvasIdRef.current
+    if (!canvasId) return
     try {
-      const elements = api.getSceneElements()
-      const appState = api.getAppState()
-      const files = api.getFiles ? api.getFiles() : {}
-      const persistAppState: Record<string, any> = {}
-      for (const key of PERSIST_APP_STATE_KEYS) {
-        if (key in appState) persistAppState[key] = appState[key]
-      }
-
-      // Synchronous localStorage write for immediate persistence
-      const canvasId = canvasIdRef.current
-      if (!canvasId) return
-      const elementsJson = JSON.stringify(elements)
-      const appStateJson = JSON.stringify(persistAppState)
-      const filesJson = JSON.stringify(files)
-
-      // Always write to localStorage as immediate backup
-      try {
-        const lsKey = `tesserin:canvas:${canvasId}`
-        const existing = localStorage.getItem(lsKey)
-        const canvas = existing ? JSON.parse(existing) : {
-          id: canvasId,
-          name: "Canvas",
-          files: "{}",
-          created_at: new Date().toISOString(),
-        }
-        canvas.elements = elementsJson
-        canvas.app_state = appStateJson
-        canvas.files = filesJson
-        canvas.updated_at = new Date().toISOString()
-        localStorage.setItem(lsKey, JSON.stringify(canvas))
-      } catch { }
-
-      // Also fire async IPC save (may or may not complete before unload)
-      storage.updateCanvas(canvasId, {
-        elements: elementsJson,
-        appState: appStateJson,
-        files: filesJson,
-      }).catch(() => { })
-
-      // Bump updated time in canvas list
-      touchCanvas(canvasId)
-    } catch { }
-  }, [touchCanvas])
+      flushToStorage(canvasId)
+    } catch (err) {
+      console.warn("[Tesserin] saveNow failed:", err)
+    }
+  }, [flushToStorage])
 
   // Keep saveNow accessible from callbacks that close over old state
   const saveNowRef = useRef(saveNow)
   useEffect(() => { saveNowRef.current = saveNow }, [saveNow])
 
   // ── Debounced save ────────────────────────────────────────────
+  // latestSceneRef is updated each onChange; the debounced callback just reads it.
   const doSave = useCallback(
-    (elements: readonly any[], appState: Record<string, any>, files: Record<string, any> = {}) => {
+    () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
 
-      // Snapshot the canvas ID NOW so the debounced callback saves to the correct canvas
       const targetCanvasId = canvasIdRef.current
       if (!targetCanvasId) return
 
       saveTimerRef.current = setTimeout(() => {
-        // Double-check we're still on the same canvas; abort if user switched
         if (canvasIdRef.current !== targetCanvasId) return
-
         try {
-          // Pick only persistable appState keys
-          const persistAppState: Record<string, any> = {}
-          for (const key of PERSIST_APP_STATE_KEYS) {
-            if (key in appState) persistAppState[key] = appState[key]
-          }
-
-          const elementsJson = JSON.stringify(elements)
-          const appStateJson = JSON.stringify(persistAppState)
-          const filesJson = JSON.stringify(files)
-
-          // Write to localStorage synchronously as backup
-          try {
-            const lsKey = `tesserin:canvas:${targetCanvasId}`
-            const existing = localStorage.getItem(lsKey)
-            const canvas = existing ? JSON.parse(existing) : {
-              id: targetCanvasId,
-              name: "Canvas",
-              files: "{}",
-              created_at: new Date().toISOString(),
-            }
-            canvas.elements = elementsJson
-            canvas.app_state = appStateJson
-            canvas.files = filesJson
-            canvas.updated_at = new Date().toISOString()
-            localStorage.setItem(lsKey, JSON.stringify(canvas))
-          } catch { }
-
-          // Also save via IPC/storage API
-          storage
-            .updateCanvas(targetCanvasId, {
-              elements: elementsJson,
-              appState: appStateJson,
-              files: filesJson,
-            })
-            .catch((err) =>
-              console.warn("[Tesserin] Canvas save failed:", err),
-            )
-        } catch {
-          // Silently ignore serialization errors
+          flushToStorage(targetCanvasId)
+        } catch (err) {
+          console.warn("[Tesserin] Debounced canvas save failed:", err)
         }
       }, 500)
     },
-    [],
+    [flushToStorage],
   )
 
   // ── Save on beforeunload (page refresh / close) ───────────────
@@ -747,27 +729,21 @@ export function CreativeCanvas({ onSplitOpen, paneId = "primary" }: { onSplitOpe
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
   }, [saveNow])
 
-  // Cleanup save timer on unmount — always flush current state to DB.
-  // NOTE: Intentionally bypasses readyToSave guard. api.getSceneElements() always
-  // returns the live scene, so it is safe to save regardless of when the component
-  // mounted. This fixes data loss when the user switches tabs within the first 800ms.
+  // Cleanup save timer on unmount — flush latest scene from latestSceneRef to DB.
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-      const api = apiRef.current
       const canvasId = canvasIdRef.current
-      if (!api || !canvasId) return
+      const scene = latestSceneRef.current
+      if (!canvasId || !scene || scene.elements.length === 0) return
       try {
-        const elements = api.getSceneElements()
-        const appState = api.getAppState()
-        const files = api.getFiles ? api.getFiles() : {}
         const persistAppState: Record<string, any> = {}
         for (const key of PERSIST_APP_STATE_KEYS) {
-          if (key in appState) persistAppState[key] = appState[key]
+          if (key in scene.appState) persistAppState[key] = scene.appState[key]
         }
-        const elementsJson = JSON.stringify(elements)
+        const elementsJson = JSON.stringify(scene.elements)
         const appStateJson = JSON.stringify(persistAppState)
-        const filesJson = JSON.stringify(files)
+        const filesJson = JSON.stringify(scene.files)
         // Synchronous localStorage write
         try {
           const lsKey = `tesserin:canvas:${canvasId}`
@@ -778,10 +754,16 @@ export function CreativeCanvas({ onSplitOpen, paneId = "primary" }: { onSplitOpe
           lsData.files = filesJson
           lsData.updated_at = new Date().toISOString()
           localStorage.setItem(lsKey, JSON.stringify(lsData))
-        } catch { }
+        } catch (err) {
+          console.warn("[Tesserin] Unmount localStorage save failed:", err)
+        }
         // Async IPC (best-effort)
-        storage.updateCanvas(canvasId, { elements: elementsJson, appState: appStateJson, files: filesJson }).catch(() => {})
-      } catch { }
+        storage.updateCanvas(canvasId, { elements: elementsJson, appState: appStateJson, files: filesJson }).catch((err) => {
+          console.warn("[Tesserin] Unmount IPC save failed:", err)
+        })
+      } catch (err) {
+        console.warn("[Tesserin] Unmount save failed:", err)
+      }
     }
   }, []) // empty deps — refs are always current, no stale closure risk
 
@@ -789,23 +771,39 @@ export function CreativeCanvas({ onSplitOpen, paneId = "primary" }: { onSplitOpe
     apiRef.current = api
     // Only the primary pane owns the global export API reference
     if (paneId === "primary") setExcalidrawAPI(api)
-    // If canvas data finished loading before Excalidraw was ready, apply it now
-    if (pendingSceneRef.current) {
-      api.updateScene(pendingSceneRef.current)
-      pendingSceneRef.current = null
-      setIsTransitioning(false)
-      setTimeout(() => { readyToSave.current = true }, 800)
-    }
+    // Data is now applied via initialData prop, so no post-mount updateScene needed.
   }, [])
 
-  // Excalidraw onChange receives (elements, appState, files)
+  // Excalidraw onChange — captures the latest scene data and triggers a debounced save.
   const onChange = useCallback(
     (elements: readonly any[], appState: Record<string, any>, files: Record<string, any> = {}) => {
+      // During initialisation Excalidraw may fire onChange with 0 elements
+      // before the real scene is rendered.  Don't let that overwrite the
+      // latestSceneRef that holds the data we just loaded from storage.
+      if (elements.length > 0 || readyToSave.current) {
+        latestSceneRef.current = { elements, appState, files }
+      }
       if (!readyToSave.current) return
-      doSave(elements, appState, files)
+      doSave()
     },
     [doSave],
   )
+
+  // ── Periodic auto-save (safety net) ──────────────────────────
+  // Catches any missed saves where onChange didn't fire or debounce was cancelled.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!readyToSave.current) return
+      const canvasId = canvasIdRef.current
+      if (!canvasId) return
+      try {
+        flushToStorage(canvasId)
+      } catch (err) {
+        console.warn("[Tesserin] Periodic canvas save failed:", err)
+      }
+    }, 10_000)
+    return () => clearInterval(interval)
+  }, [flushToStorage])
 
   // Triggered when a user adds/removes to their personal Excalidraw library
   const onLibraryChange = useCallback(
@@ -1213,14 +1211,13 @@ export function CreativeCanvas({ onSplitOpen, paneId = "primary" }: { onSplitOpe
       <div
         className="flex-1 relative min-h-0"
       >
-        {/* Excalidraw is always mounted — canvas switches use updateScene() so it never
-          remounts. This eliminates the blank-flash / stuck behaviour between tabs. */}
-        <Excalidraw
+        {/* Excalidraw is gated behind excalidrawReady so it mounts with correct
+          initialData. Subsequent canvas switches use updateScene() via apiRef. */}
+        {excalidrawReady && <Excalidraw
           key="tesserin-excalidraw"
           excalidrawAPI={onAPI}
           initialData={{
-            elements: [],
-            appState: { theme: isDark ? "dark" : "light" },
+            ...(initialSceneRef.current ?? { elements: [], appState: { theme: isDark ? "dark" : "light" } }),
             ...(libraryInitData ? { libraryItems: libraryInitData } : {})
           }}
           onChange={onChange}
@@ -1272,7 +1269,7 @@ export function CreativeCanvas({ onSplitOpen, paneId = "primary" }: { onSplitOpe
               </div>
             </WelcomeScreen.Center>
           </WelcomeScreen>
-        </Excalidraw>
+        </Excalidraw>}
 
         {showNotePicker && (
           <NotePickerPanel
