@@ -41,8 +41,8 @@ export function labelFontSize(
 export function pinnedLabelCount(nodeCount: number): number {
   if (nodeCount > 100) return 10
   if (nodeCount > 70) return 9
-  if (nodeCount > 40) return 8
-  if (nodeCount > 24) return 7
+  if (nodeCount > 52) return 8
+  if (nodeCount > 24) return 8
   if (nodeCount > 14) return 6
   return nodeCount
 }
@@ -69,17 +69,22 @@ export function labelOpacity(
 ): number {
   const query = filterQuery.trim().toLowerCase()
   const matchesFilter = query.length > 0 && d.title.toLowerCase().includes(query)
+  const fittedScale = nodeCount <= 36
+    ? scale + 0.18
+    : nodeCount <= 52
+    ? scale + 0.1
+    : scale
 
   if (d.id === selectedId || d.id === hoveredId || matchesFilter) return 1
   if (query.length > 0) return 0
   if (isPinnedLabel(d, nodeCount)) {
-    if (nodeCount > 40) return 0.78
-    if (nodeCount > 24) return 0.74
+    if (nodeCount > 52) return 0.78
+    if (nodeCount > 24) return 0.76
     return 0.86
   }
-  if (nodeCount <= 32 && scale >= 0.9) return d.linkCount > 0 ? 0.4 : 0.26
-  if (nodeCount <= 48 && scale >= 1.1) return d.linkCount > 0 ? 0.32 : 0.18
-  if (scale >= 2.25) return 0.7
-  if (scale >= 1.45 && d.linkCount > 0) return 0.48
+  if (nodeCount <= 36 && fittedScale >= 0.82) return d.linkCount > 0 ? 0.42 : 0.3
+  if (nodeCount <= 52 && fittedScale >= 1) return d.linkCount > 0 ? 0.34 : 0.22
+  if (fittedScale >= 2.1) return 0.7
+  if (fittedScale >= 1.35 && d.linkCount > 0) return 0.48
   return 0
 }

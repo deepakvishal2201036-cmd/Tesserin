@@ -24,7 +24,20 @@ describe("graph label visibility", () => {
       32,
       null,
       null,
-      1,
+      0.72,
+      "",
+    )
+
+    expect(opacity).toBeGreaterThan(0)
+  })
+
+  it("keeps medium-graph leaf labels visible at the fitted-out default zoom", () => {
+    const opacity = labelOpacity(
+      makeNode({ linkCount: 0, labelRank: 20 }),
+      40,
+      null,
+      null,
+      0.92,
       "",
     )
 
