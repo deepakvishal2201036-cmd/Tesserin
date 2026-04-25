@@ -24,6 +24,8 @@ This matters because it keeps the desktop application source out of the Vercel d
 
 Keep `Include source files outside of the Root Directory` disabled for this project. That preserves the boundary between the public website and the desktop app source tree.
 
+If a Vercel project is accidentally pointed at the repository root, the root-level `vercel.json` and `.vercelignore` now force the deployment to build only this marketing site and its download function. Using this folder as the Root Directory is still the cleanest setup.
+
 ## Release dependency
 
 For downloads to work cleanly, GitHub releases for the desktop app should contain:

@@ -1,0 +1,6 @@
+*
+!vercel.json
+!api/
+!api/**
+!tesserin-your-ai-dev-workspace/
+!tesserin-your-ai-dev-workspace/**

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm --prefix tesserin-your-ai-dev-workspace install",
+  "buildCommand": "npm --prefix tesserin-your-ai-dev-workspace run build",
+  "outputDirectory": "tesserin-your-ai-dev-workspace/dist",
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/download.ts": {
+      "maxDuration": 10
+    }
+  }
+}
