@@ -23,6 +23,7 @@ declare const tesserinAPI: {
             delete: (id: string) => Promise<any>;
             search: (query: string) => Promise<any>;
             getByTitle: (title: string) => Promise<any>;
+            onUpdated: (callback: () => void) => () => void;
         };
         tags: {
             list: () => Promise<any>;
@@ -220,6 +221,12 @@ declare const tesserinAPI: {
     };
     onCanvasUpdated: (callback: (canvasId: string) => void) => (_e: Electron.IpcRendererEvent, canvasId: string) => void;
     offCanvasUpdated: (handler: (...args: any[]) => void) => void;
+    onNoteCreated: (callback: (noteId: string) => void) => (_e: Electron.IpcRendererEvent, noteId: string) => void;
+    offNoteCreated: (handler: (...args: any[]) => void) => void;
+    onNoteUpdated: (callback: (noteId: string) => void) => (_e: Electron.IpcRendererEvent, noteId: string) => void;
+    offNoteUpdated: (handler: (...args: any[]) => void) => void;
+    onNoteDeleted: (callback: (noteId: string) => void) => (_e: Electron.IpcRendererEvent, noteId: string) => void;
+    offNoteDeleted: (handler: (...args: any[]) => void) => void;
     updater: {
         check: () => Promise<any>;
         download: () => Promise<any>;

@@ -223,6 +223,64 @@ export function NotesProvider({ children }: NotesProviderProps) {
     loadFromDB()
   }, [])
 
+  // Listen for note events from MCP/IPC (instant updates)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const api = window.tesserin
+    if (!api?.onNoteCreated) return
+
+    const handleNoteCreated = async (noteId: string) => {
+      try {
+        const dbNote = await storage.getNote(noteId)
+        if (!dbNote) return
+
+        const noteTags = await storage.getTagsForNote(noteId).catch(() => []) as any[]
+        const newNote: Note = {
+          id: dbNote.id,
+          title: dbNote.title,
+          content: dbNote.content,
+          createdAt: dbNote.created_at,
+          updatedAt: dbNote.updated_at,
+          tags: noteTags?.map((t: any) => ({ id: t.id, name: t.name, color: t.color })) || [],
+          folderId: dbNote.folder_id || null,
+        }
+        setNotes((prev) => {
+          if (prev.some((n) => n.id === noteId)) return prev
+          return [newNote, ...prev]
+        })
+      } catch { /* ignore */ }
+    }
+
+    const handleNoteUpdated = async (noteId: string) => {
+      try {
+        const dbNote = await storage.getNote(noteId)
+        if (!dbNote) return
+        setNotes((prev) =>
+          prev.map((n) =>
+            n.id === noteId
+              ? { ...n, title: dbNote.title, content: dbNote.content, updatedAt: dbNote.updated_at }
+              : n
+          )
+        )
+      } catch { /* ignore */ }
+    }
+
+    const handleNoteDeleted = (noteId: string) => {
+      setNotes((prev) => prev.filter((n) => n.id !== noteId))
+      setSelectedNoteId((prev) => (prev === noteId ? null : prev))
+    }
+
+    const createdHandler = (api as any).onNoteCreated(handleNoteCreated)
+    const updatedHandler = (api as any).onNoteUpdated(handleNoteUpdated)
+    const deletedHandler = (api as any).onNoteDeleted(handleNoteDeleted)
+
+    return () => {
+      if (createdHandler) (api as any).offNoteCreated(createdHandler)
+      if (updatedHandler) (api as any).offNoteUpdated(updatedHandler)
+      if (deletedHandler) (api as any).offNoteDeleted(deletedHandler)
+    }
+  }, [])
+
   const graph = useMemo(() => computeGraph(notes), [notes])
 
   const selectNote = useCallback((id: string | null) => {

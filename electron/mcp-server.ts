@@ -119,6 +119,13 @@ export function createMcpServer(): McpServer {
     },
     async ({ title, content, folderId }) => {
       const note = db.createNote({ title, content: content || "", folderId }) as { id: string; title: string }
+      // Notify renderer about the new note
+      try {
+        const { BrowserWindow } = await import("electron")
+        BrowserWindow.getAllWindows().forEach((win) => {
+          win.webContents.send("note:created", note.id)
+        })
+      } catch {}
       return {
         content: [
           {
@@ -151,6 +158,13 @@ export function createMcpServer(): McpServer {
       if (title !== undefined) updates.title = title
       if (content !== undefined) updates.content = content
       db.updateNote(noteId, updates)
+      // Notify renderer about the updated note
+      try {
+        const { BrowserWindow } = await import("electron")
+        BrowserWindow.getAllWindows().forEach((win) => {
+          win.webContents.send("note:updated", noteId)
+        })
+      } catch {}
       return {
         content: [
           {
@@ -176,6 +190,13 @@ export function createMcpServer(): McpServer {
         }
       }
       db.deleteNote(noteId)
+      // Notify renderer about the deleted note
+      try {
+        const { BrowserWindow } = await import("electron")
+        BrowserWindow.getAllWindows().forEach((win) => {
+          win.webContents.send("note:deleted", noteId)
+        })
+      } catch {}
       return {
         content: [
           {

@@ -20,6 +20,13 @@ const tesserinAPI = {
             delete: (id: string) => ipcRenderer.invoke('db:notes:delete', id),
             search: (query: string) => ipcRenderer.invoke('db:notes:search', query),
             getByTitle: (title: string) => ipcRenderer.invoke('db:notes:getByTitle', title),
+            onUpdated: (callback: () => void) => {
+                const listener = () => callback()
+                ipcRenderer.on('db:notes:updated', listener)
+                return () => {
+                    ipcRenderer.removeListener('db:notes:updated', listener)
+                }
+            },
         },
 
         // ── Database: Tags ──────────────────────────────────────────────
@@ -254,6 +261,32 @@ const tesserinAPI = {
     },
     offCanvasUpdated: (handler: (...args: any[]) => void) => {
         ipcRenderer.removeListener('canvas:updated', handler)
+    },
+
+    // ── Notes Events ─────────────────────────────────────────────────
+    onNoteCreated: (callback: (noteId: string) => void) => {
+        const handler = (_e: Electron.IpcRendererEvent, noteId: string) => callback(noteId)
+        ipcRenderer.on('note:created', handler)
+        return handler
+    },
+    offNoteCreated: (handler: (...args: any[]) => void) => {
+        ipcRenderer.removeListener('note:created', handler)
+    },
+    onNoteUpdated: (callback: (noteId: string) => void) => {
+        const handler = (_e: Electron.IpcRendererEvent, noteId: string) => callback(noteId)
+        ipcRenderer.on('note:updated', handler)
+        return handler
+    },
+    offNoteUpdated: (handler: (...args: any[]) => void) => {
+        ipcRenderer.removeListener('note:updated', handler)
+    },
+    onNoteDeleted: (callback: (noteId: string) => void) => {
+        const handler = (_e: Electron.IpcRendererEvent, noteId: string) => callback(noteId)
+        ipcRenderer.on('note:deleted', handler)
+        return handler
+    },
+    offNoteDeleted: (handler: (...args: any[]) => void) => {
+        ipcRenderer.removeListener('note:deleted', handler)
     },
 
     // ── Auto-updater ──────────────────────────────────────────────────

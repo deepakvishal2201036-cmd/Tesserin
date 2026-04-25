@@ -366,6 +366,12 @@ interface TesserinAPI {
     canvas?: TesserinCanvasAPI
     onCanvasUpdated?: (callback: (canvasId: string) => void) => any
     offCanvasUpdated?: (handler: (...args: any[]) => void) => void
+    onNoteCreated?: (callback: (noteId: string) => void) => any
+    offNoteCreated?: (handler: (...args: any[]) => void) => void
+    onNoteUpdated?: (callback: (noteId: string) => void) => any
+    offNoteUpdated?: (handler: (...args: any[]) => void) => void
+    onNoteDeleted?: (callback: (noteId: string) => void) => any
+    offNoteDeleted?: (handler: (...args: any[]) => void) => void
 }
 
 declare global {

@@ -203,12 +203,12 @@ function createGoldenDefs(
   textGlow
     .append("feGaussianBlur")
     .attr("in", "SourceGraphic")
-    .attr("stdDeviation", "2")
+    .attr("stdDeviation", "1")
     .attr("result", "blur")
   textGlow
     .append("feFlood")
-    .attr("flood-color", "#000000")
-    .attr("flood-opacity", "0.7")
+    .attr("flood-color", "var(--bg-app)")
+    .attr("flood-opacity", "0.9")
     .attr("result", "color")
   textGlow
     .append("feComposite")
@@ -497,7 +497,7 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
             ? "var(--text-primary)" 
             : (d.depth !== undefined && d.depth <= 1 && d.linkCount > 0)
             ? "var(--text-primary)" 
-            : "var(--text-muted)",
+            : "var(--text-secondary)",
         )
         .attr("font-size", (d) => {
           if (d.id === selectedNoteIdRef.current) return 12
@@ -517,8 +517,8 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
         .style("opacity", (d) => {
           if (d.id === selectedNoteIdRef.current) return 1
           // Dim labels progressively further down the tree
-          if (d.depth !== undefined && d.depth > 2) return 0.25
-          return 0.65
+          if (d.depth !== undefined && d.depth > 2) return 0.6
+          return 0.85
         })
         .style("transition", "opacity 0.25s, fill 0.25s, font-size 0.25s")
 
@@ -546,8 +546,11 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
             .attr("stroke-width", 1)
           group
             .select("text")
-            .style("opacity", 0.6)
-            .attr("fill", "var(--text-muted)")
+            .style("opacity", (d: any) => {
+              if (d.depth !== undefined && d.depth > 2) return 0.6
+              return 0.85
+            })
+            .attr("fill", "var(--text-secondary)")
             .attr("font-weight", "400")
         }
       })
@@ -930,11 +933,11 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
     // Update text
     svg.selectAll(".graph-node text")
       .attr("fill", (d: any) =>
-        d.id === selectedNoteId ? "var(--text-primary)" : "var(--text-muted)",
+        d.id === selectedNoteId ? "var(--text-primary)" : "var(--text-secondary)",
       )
       .attr("font-size", (d: any) => (d.id === selectedNoteId ? 12 : 10))
       .attr("font-weight", (d: any) => (d.id === selectedNoteId ? 600 : 400))
-      .style("opacity", (d: any) => (d.id === selectedNoteId ? 1 : 0.6))
+      .style("opacity", (d: any) => (d.id === selectedNoteId ? 1 : 0.85))
 
   }, [selectedNoteId])
 

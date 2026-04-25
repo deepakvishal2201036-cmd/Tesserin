@@ -18,6 +18,13 @@ const tesserinAPI = {
             delete: (id) => electron_1.ipcRenderer.invoke('db:notes:delete', id),
             search: (query) => electron_1.ipcRenderer.invoke('db:notes:search', query),
             getByTitle: (title) => electron_1.ipcRenderer.invoke('db:notes:getByTitle', title),
+            onUpdated: (callback) => {
+                const listener = () => callback();
+                electron_1.ipcRenderer.on('db:notes:updated', listener);
+                return () => {
+                    electron_1.ipcRenderer.removeListener('db:notes:updated', listener);
+                };
+            },
         },
         // ── Database: Tags ──────────────────────────────────────────────
         tags: {
@@ -205,6 +212,31 @@ const tesserinAPI = {
     },
     offCanvasUpdated: (handler) => {
         electron_1.ipcRenderer.removeListener('canvas:updated', handler);
+    },
+    // ── Notes Events ─────────────────────────────────────────────────
+    onNoteCreated: (callback) => {
+        const handler = (_e, noteId) => callback(noteId);
+        electron_1.ipcRenderer.on('note:created', handler);
+        return handler;
+    },
+    offNoteCreated: (handler) => {
+        electron_1.ipcRenderer.removeListener('note:created', handler);
+    },
+    onNoteUpdated: (callback) => {
+        const handler = (_e, noteId) => callback(noteId);
+        electron_1.ipcRenderer.on('note:updated', handler);
+        return handler;
+    },
+    offNoteUpdated: (handler) => {
+        electron_1.ipcRenderer.removeListener('note:updated', handler);
+    },
+    onNoteDeleted: (callback) => {
+        const handler = (_e, noteId) => callback(noteId);
+        electron_1.ipcRenderer.on('note:deleted', handler);
+        return handler;
+    },
+    offNoteDeleted: (handler) => {
+        electron_1.ipcRenderer.removeListener('note:deleted', handler);
     },
     // ── Auto-updater ──────────────────────────────────────────────────
     updater: {
