@@ -4,6 +4,15 @@ import React, { useEffect, useRef, useState, useCallback } from "react"
 import * as d3 from "d3"
 import { FiZoomIn, FiZoomOut, FiMaximize, FiActivity, FiGitBranch, FiTarget, FiPlus } from "react-icons/fi"
 import { useNotes, type GraphNode, type GraphLink } from "@/lib/notes-store"
+import {
+  labelFontSize,
+  labelOpacity,
+  maxTitleLength,
+  nodeRadius,
+  truncateTitle,
+  isPinnedLabel,
+  type GraphLabelDatum,
+} from "@/lib/graph-labels"
 import { TesserinLogo } from "../core/tesserin-logo"
 import { TesseradrawLogo } from "./tesseradraw-logo"
 import "@excalidraw/excalidraw/index.css"
@@ -26,12 +35,27 @@ interface SimNode extends d3.SimulationNodeDatum {
   id: string
   title: string
   linkCount: number
+  labelRank: number
 }
 
 /** Internal link type used by D3 simulations */
 interface SimLink extends d3.SimulationLinkDatum<SimNode> {
   source: string | SimNode
   target: string | SimNode
+}
+
+interface RenderNodeDatum {
+  id: GraphLabelDatum["id"]
+  title: GraphLabelDatum["title"]
+  linkCount: GraphLabelDatum["linkCount"]
+  labelRank: GraphLabelDatum["labelRank"]
+  x: number
+  y: number
+  depth?: GraphLabelDatum["depth"]
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
 }
 
 /* ------------------------------------------------------------------ */
@@ -238,7 +262,7 @@ function createGoldenDefs(
  * - Pan and zoom via D3 zoom behaviour
  * - Node dragging (force mode)
  * - Click-to-navigate: clicking a node selects that note in the editor
- * - Always-visible note titles with smart truncation
+ * - Density-aware note titles with hover, zoom, and filter reveal
  * - Golden glow effects via SVG filters
  * - Skeuomorphic mode selector and zoom controls
  * - Staggered entrance animations for nodes and links
@@ -272,6 +296,8 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
 
   const simulationRef = useRef<d3.Simulation<SimNode, SimLink> | null>(null)
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+  const hoveredNodeRef = useRef<string | null>(null)
+  const filterQueryRef = useRef("")
   /** Persists the user's current zoom/pan across re-renders that don't change mode */
   const currentTransformRef = useRef<d3.ZoomTransform | null>(null)
   /** Tracks the previously rendered mode so we know when the layout is "fresh" */
@@ -282,6 +308,10 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
   useEffect(() => {
     selectedNoteIdRef.current = selectedNoteId
   }, [selectedNoteId])
+
+  useEffect(() => {
+    filterQueryRef.current = filterQuery
+  }, [filterQuery])
 
   /* ---- Main D3 render effect ---- */
   const renderGraph = useCallback(() => {
@@ -314,9 +344,23 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
     // Golden glow SVG filters & ambient gradient
     createGoldenDefs(svg)
 
+    const nodeCount = graph.nodes.length
+    const labelRank = new Map(
+      [...graph.nodes]
+        .sort((a, b) => b.linkCount - a.linkCount || a.title.localeCompare(b.title))
+        .map((node, index) => [node.id, index]),
+    )
+    const neighbors = new Map<string, Set<string>>()
+    graph.nodes.forEach((node) => neighbors.set(node.id, new Set()))
+    graph.links.forEach((link) => {
+      neighbors.get(link.source)?.add(link.target)
+      neighbors.get(link.target)?.add(link.source)
+    })
+
     // Prepare data copies
     const simNodes: SimNode[] = graph.nodes.map((n) => ({
       ...n,
+      labelRank: labelRank.get(n.id) ?? Number.MAX_SAFE_INTEGER,
       x: undefined,
       y: undefined,
     }))
@@ -333,6 +377,7 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
       .scaleExtent([0.05, 8])
       .on("zoom", (event) => {
         g.attr("transform", event.transform)
+        applyLabelPresentation(event.transform.k)
         // Persist so the next re-render can restore the user's position
         currentTransformRef.current = event.transform
       })
@@ -381,10 +426,78 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
 
     /* ---- Shared rendering helpers ---- */
 
-    /** Truncate a title for display based on node importance */
-    function truncTitle(title: string, linkCount: number): string {
-      const maxLen = linkCount > 3 ? 26 : 18
-      return title.length > maxLen ? title.slice(0, maxLen) + "\u2026" : title
+    /** Truncate a title for display based on graph density and node importance */
+    function truncTitle(d: Pick<RenderNodeDatum, "title" | "linkCount">): string {
+      return truncateTitle(d.title, maxTitleLength(d, nodeCount))
+    }
+
+    function linkEndpointId(endpoint: unknown): string {
+      if (typeof endpoint === "string") return endpoint
+      if (endpoint && typeof endpoint === "object" && "id" in endpoint) return String((endpoint as { id: string }).id)
+      if (endpoint && typeof endpoint === "object" && "data" in endpoint) {
+        const data = (endpoint as { data?: { id?: string } }).data
+        return data?.id ?? ""
+      }
+      return ""
+    }
+
+    function linkTouchesNode(link: unknown, nodeId: string): boolean {
+      const d = link as {
+        source?: unknown
+        target?: unknown
+        sourceId?: string
+        targetId?: string
+      }
+      const sourceId = d.sourceId ?? linkEndpointId(d.source)
+      const targetId = d.targetId ?? linkEndpointId(d.target)
+      return sourceId === nodeId || targetId === nodeId
+    }
+
+    function applyLabelPresentation(scale = currentTransformRef.current?.k ?? 1) {
+      const query = filterQueryRef.current
+      const selectedId = selectedNoteIdRef.current
+      const hoveredId = hoveredNodeRef.current
+      const screenScale = Math.max(scale, 0.85)
+
+      g.selectAll<SVGTextElement, RenderNodeDatum>(".node-label")
+        .attr("display", (d) =>
+          labelOpacity(d, nodeCount, selectedId, hoveredId, scale, query) > 0 ? null : "none",
+        )
+        .attr("font-size", (d) => labelFontSize(d, nodeCount, selectedId) / screenScale)
+        .attr("stroke-width", 2 / screenScale)
+        .attr("y", (d) => -(nodeRadius(d) + 8) / screenScale)
+        .style("opacity", (d) =>
+          labelOpacity(d, nodeCount, selectedId, hoveredId, scale, query),
+        )
+    }
+
+    function restoreGraphFocus() {
+      const query = filterQueryRef.current.trim().toLowerCase()
+      g.selectAll<SVGGElement, RenderNodeDatum>(".graph-node")
+        .style("opacity", (d) =>
+          !query || d.title.toLowerCase().includes(query) ? 1 : 0.08,
+        )
+      g.selectAll<SVGLineElement | SVGPathElement, unknown>(".graph-link")
+        .attr("stroke-opacity", function () {
+          return Number((this as SVGElement).dataset.baseOpacity ?? "0.18")
+        })
+        .attr("stroke-width", function () {
+          return Number((this as SVGElement).dataset.baseWidth ?? "1")
+        })
+    }
+
+    function focusNode(nodeId: string) {
+      const connected = neighbors.get(nodeId) ?? new Set<string>()
+      g.selectAll<SVGGElement, RenderNodeDatum>(".graph-node")
+        .style("opacity", (d) =>
+          d.id === nodeId || connected.has(d.id) ? 1 : 0.2,
+        )
+      g.selectAll<SVGLineElement | SVGPathElement, unknown>(".graph-link")
+        .attr("stroke-opacity", (d) => linkTouchesNode(d, nodeId) ? 0.62 : 0.06)
+        .attr("stroke-width", function (d) {
+          const base = Number((this as SVGElement).dataset.baseWidth ?? "1")
+          return linkTouchesNode(d, nodeId) ? Math.max(base + 0.9, 1.4) : base
+        })
     }
 
     function renderLinks(
@@ -408,6 +521,8 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
         .attr("y2", (d) => d.ty)
         .attr("stroke", "var(--text-secondary)")
         .attr("stroke-width", 1)
+        .attr("data-base-width", 1)
+        .attr("data-base-opacity", 0.18)
         .attr("stroke-opacity", 0)
         .transition()
         .duration(800)
@@ -416,14 +531,7 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
     }
 
     function renderNodes(
-      positions: {
-        id: string
-        title: string
-        linkCount: number
-        x: number
-        y: number
-        depth?: number
-      }[],
+      positions: RenderNodeDatum[],
       draggable: boolean,
     ) {
       const nodeGroup = g
@@ -439,10 +547,16 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
           selectNote(d.id)
         })
         .on("mouseenter", (_event, d) => {
+          hoveredNodeRef.current = d.id
           setHoveredNode(d.id)
+          focusNode(d.id)
+          applyLabelPresentation()
         })
         .on("mouseleave", () => {
+          hoveredNodeRef.current = null
           setHoveredNode(null)
+          restoreGraphFocus()
+          applyLabelPresentation()
         })
 
       // Staggered entrance animation
@@ -455,11 +569,7 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
       // Node circle — subtle stylistic changes based on depth
       nodeGroup
         .append("circle")
-        .attr("r", (d) => {
-          // If in mind/radial layout, we can emphasize the structural roots
-          if (d.depth !== undefined && d.depth <= 1 && d.linkCount > 0) return 6.5
-          return Math.max(3.5, Math.min(8, 3.5 + d.linkCount * 0.8))
-        })
+        .attr("r", (d) => nodeRadius(d))
         .attr("fill", (d) =>
           d.id === selectedNoteIdRef.current
             ? "var(--accent-primary)"
@@ -483,27 +593,18 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
       // Label — fade out deeper leafs to avoid noise in large graphs
       nodeGroup
         .append("text")
-        .text((d) => truncTitle(d.title, d.linkCount))
-        .attr(
-          "y",
-          (d) => {
-            const rad = (d.depth !== undefined && d.depth <= 1 && d.linkCount > 0) ? 6.5 : Math.max(3.5, Math.min(8, 3.5 + d.linkCount * 0.8))
-            return -(rad + 6)
-          }
-        )
+        .attr("class", "node-label")
+        .text((d) => truncTitle(d))
+        .attr("y", (d) => -(nodeRadius(d) + 8))
         .attr("text-anchor", "middle")
         .attr("fill", (d) =>
           d.id === selectedNoteIdRef.current 
             ? "var(--text-primary)" 
             : (d.depth !== undefined && d.depth <= 1 && d.linkCount > 0)
             ? "var(--text-primary)" 
-            : "var(--text-secondary)",
+            : "var(--text-muted)",
         )
-        .attr("font-size", (d) => {
-          if (d.id === selectedNoteIdRef.current) return 12
-          if (d.depth !== undefined && d.depth <= 1 && d.linkCount > 0) return 11
-          return 9.5
-        })
+        .attr("font-size", (d) => labelFontSize(d, nodeCount, selectedNoteIdRef.current))
         .attr("font-weight", (d) => {
           if (d.id === selectedNoteIdRef.current) return 600
           if (d.depth !== undefined && d.depth <= 1 && d.linkCount > 0) return 500
@@ -514,12 +615,7 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
         .attr("stroke-width", 2)
         .attr("paint-order", "stroke fill")
         .style("pointer-events", "none")
-        .style("opacity", (d) => {
-          if (d.id === selectedNoteIdRef.current) return 1
-          // Dim labels progressively further down the tree
-          if (d.depth !== undefined && d.depth > 2) return 0.6
-          return 0.85
-        })
+        .style("opacity", 0)
         .style("transition", "opacity 0.25s, fill 0.25s, font-size 0.25s")
 
       // Hover: intensify glow + brighten label
@@ -546,14 +642,20 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
             .attr("stroke-width", 1)
           group
             .select("text")
-            .style("opacity", (d: any) => {
-              if (d.depth !== undefined && d.depth > 2) return 0.6
-              return 0.85
-            })
-            .attr("fill", "var(--text-secondary)")
-            .attr("font-weight", "400")
+            .attr(
+              "fill",
+              d.depth !== undefined && d.depth <= 1 && d.linkCount > 0
+                ? "var(--text-primary)"
+                : "var(--text-muted)",
+            )
+            .attr(
+              "font-weight",
+              d.depth !== undefined && d.depth <= 1 && d.linkCount > 0 ? "500" : "400",
+            )
         }
       })
+
+      applyLabelPresentation()
 
       if (draggable && simulationRef.current) {
         const sim = simulationRef.current
@@ -594,6 +696,11 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
 
     /* ---- FORCE MODE ---- */
     if (mode === "force") {
+      const denseGraph = nodeCount > 18
+      const linkDistance = clamp(72 + Math.sqrt(nodeCount) * 13 + (denseGraph ? 18 : 0), 84, 190)
+      const linkStrength = clamp(0.58 - nodeCount * 0.006, 0.18, 0.58)
+      const chargeStrength = -clamp(180 + nodeCount * 8, 240, 900)
+
       const simulation = d3
         .forceSimulation<SimNode>(simNodes)
         .force(
@@ -601,18 +708,28 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
           d3
             .forceLink<SimNode, SimLink>(simLinks)
             .id((d) => d.id)
-            .distance(45) /* Tighter link distance */
-            .strength(0.6),
+            .distance(linkDistance)
+            .strength(linkStrength),
         )
         .force(
           "charge",
-          d3.forceManyBody().strength(-140).distanceMax(500), /* Softer repulsion, classic physics */
+          d3.forceManyBody().strength(chargeStrength).distanceMax(clamp(500 + nodeCount * 8, 500, 1000)),
         )
         .force("center", d3.forceCenter(0, 0))
-        .force("x", d3.forceX(0).strength(0.04)) /* Subtle gravity pulling scattered nodes back to center */
-        .force("y", d3.forceY(0).strength(0.04))
-        .force("collision", d3.forceCollide().radius((d: any) => Math.max(4, Math.min(10, 4 + d.linkCount)) + 12))
-        .alphaDecay(0.02)
+        .force("x", d3.forceX(0).strength(denseGraph ? 0.018 : 0.035))
+        .force("y", d3.forceY(0).strength(denseGraph ? 0.018 : 0.035))
+        .force(
+          "collision",
+          d3.forceCollide<SimNode>()
+            .radius((d) => {
+              const labelSpace = isPinnedLabel(d, nodeCount)
+                ? clamp(truncTitle(d).length * 2.4, 26, 76)
+                : 18
+              return nodeRadius(d) + labelSpace
+            })
+            .iterations(2),
+        )
+        .alphaDecay(denseGraph ? 0.018 : 0.022)
 
       simulationRef.current = simulation
 
@@ -624,8 +741,10 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
         .append("line")
         .attr("class", "graph-link")
         .attr("stroke", "var(--text-secondary)") /* Subtle link color similar to Obsidian */
-        .attr("stroke-width", 0.6)
-        .attr("stroke-opacity", 0.3)
+        .attr("stroke-width", denseGraph ? 0.45 : 0.6)
+        .attr("data-base-width", denseGraph ? 0.45 : 0.6)
+        .attr("data-base-opacity", denseGraph ? 0.18 : 0.3)
+        .attr("stroke-opacity", denseGraph ? 0.18 : 0.3)
 
       // Nodes
       const nodeGroup = g
@@ -636,13 +755,23 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
         .attr("class", "graph-node")
         .style("cursor", "pointer")
         .on("click", (_event, d) => selectNote(d.id))
-        .on("mouseenter", (_event, d) => setHoveredNode(d.id))
-        .on("mouseleave", () => setHoveredNode(null))
+        .on("mouseenter", (_event, d) => {
+          hoveredNodeRef.current = d.id
+          setHoveredNode(d.id)
+          focusNode(d.id)
+          applyLabelPresentation()
+        })
+        .on("mouseleave", () => {
+          hoveredNodeRef.current = null
+          setHoveredNode(null)
+          restoreGraphFocus()
+          applyLabelPresentation()
+        })
 
       // Small elegant circles for nodes
       nodeGroup
         .append("circle")
-        .attr("r", (d) => Math.max(3.5, Math.min(8, 3.5 + d.linkCount * 0.8))) /* Tiny nodes like Obsidian */
+        .attr("r", (d) => nodeRadius(d)) /* Tiny nodes like Obsidian */
         .attr("fill", (d) =>
           d.id === selectedNoteIdRef.current
             ? "var(--accent-primary)"
@@ -661,27 +790,27 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
         )
         .style("transition", "fill 0.2s, r 0.2s")
 
-      // Label — always visible
+      // Labels are density-aware: selected, hovered, filter matches, and hub nodes stay readable.
       nodeGroup
         .append("text")
-        .text((d) => truncTitle(d.title, d.linkCount))
-        .attr(
-          "y",
-          (d) => -(Math.max(3.5, Math.min(8, 3.5 + d.linkCount * 0.8)) + 6),
-        )
+        .attr("class", "node-label")
+        .text((d) => truncTitle(d))
+        .attr("y", (d) => -(nodeRadius(d) + 8))
         .attr("text-anchor", "middle")
         .attr("fill", (d) =>
           d.id === selectedNoteIdRef.current ? "var(--text-primary)" : "var(--text-muted)",
         )
-        .attr("font-size", (d) => (d.id === selectedNoteIdRef.current ? 12 : 10))
+        .attr("font-size", (d) => labelFontSize(d, nodeCount, selectedNoteIdRef.current))
         .attr("font-weight", (d) => (d.id === selectedNoteIdRef.current ? 600 : 400))
         .attr("font-family", "var(--font-sans)")
         .attr("stroke", "var(--bg-app)")
         .attr("stroke-width", 2)
         .attr("paint-order", "stroke fill")
         .style("pointer-events", "none")
-        .style("opacity", (d) => (d.id === selectedNoteIdRef.current ? 1 : 0.6))
+        .style("opacity", 0)
         .style("transition", "opacity 0.25s, fill 0.25s, font-size 0.25s")
+
+      applyLabelPresentation()
 
       // Hover effects
       nodeGroup.on("mouseenter.glow", function () {
@@ -707,7 +836,6 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
             .attr("stroke-width", 1)
           group
             .select("text")
-            .style("opacity", 0.6)
             .attr("fill", "var(--text-muted)")
             .attr("font-weight", "400")
         }
@@ -800,6 +928,8 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
         .attr("fill", "none")
         .attr("stroke", "var(--text-secondary)")
         .attr("stroke-width", (d) => Math.max(0.4, 2.5 - (d.source.depth || 0) * 0.6)) // Tapering edges
+        .attr("data-base-width", (d) => Math.max(0.4, 2.5 - (d.source.depth || 0) * 0.6))
+        .attr("data-base-opacity", (d) => Math.max(0.1, 0.45 - (d.source.depth || 0) * 0.08))
         .attr("stroke-linecap", "round")
         .attr("stroke-opacity", 0)
         .transition()
@@ -814,6 +944,7 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
           id: d.data.id,
           title: d.data.title,
           linkCount: d.data.linkCount,
+          labelRank: labelRank.get(d.data.id) ?? Number.MAX_SAFE_INTEGER,
           x: (d as any).y + offsetX,
           y: (d as any).x + offsetY,
           depth: d.depth,
@@ -876,6 +1007,8 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
         .attr("fill", "none")
         .attr("stroke", "var(--text-secondary)")
         .attr("stroke-width", (d) => Math.max(0.3, 1.8 - (d.source.depth || 0) * 0.4)) // Tapering branches
+        .attr("data-base-width", (d) => Math.max(0.3, 1.8 - (d.source.depth || 0) * 0.4))
+        .attr("data-base-opacity", (d) => Math.max(0.1, 0.4 - (d.source.depth || 0) * 0.05))
         .attr("stroke-opacity", 0)
         .transition()
         .duration(800)
@@ -892,6 +1025,7 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
           id: d.data.id,
           title: d.data.title,
           linkCount: d.data.linkCount,
+          labelRank: labelRank.get(d.data.id) ?? Number.MAX_SAFE_INTEGER,
           x: r * Math.cos(angle),
           y: r * Math.sin(angle),
           depth: d.depth,
@@ -930,16 +1064,37 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
           : "none",
       )
 
-    // Update text
-    svg.selectAll(".graph-node text")
-      .attr("fill", (d: any) =>
-        d.id === selectedNoteId ? "var(--text-primary)" : "var(--text-secondary)",
-      )
-      .attr("font-size", (d: any) => (d.id === selectedNoteId ? 12 : 10))
-      .attr("font-weight", (d: any) => (d.id === selectedNoteId ? 600 : 400))
-      .style("opacity", (d: any) => (d.id === selectedNoteId ? 1 : 0.85))
+    const scale = currentTransformRef.current?.k ?? 1
+    const screenScale = Math.max(scale, 0.85)
+    const query = filterQueryRef.current
+    const hoveredId = hoveredNodeRef.current
+    const nodeCount = graph.nodes.length
 
-  }, [selectedNoteId])
+    // Update text
+    svg.selectAll<SVGTextElement, RenderNodeDatum>(".node-label")
+      .attr("fill", (d) =>
+        d.id === selectedNoteId
+          ? "var(--text-primary)"
+          : d.depth !== undefined && d.depth <= 1 && d.linkCount > 0
+          ? "var(--text-primary)"
+          : "var(--text-muted)",
+      )
+      .attr("display", (d) =>
+        labelOpacity(d, nodeCount, selectedNoteId, hoveredId, scale, query) > 0 ? null : "none",
+      )
+      .attr("font-size", (d) => labelFontSize(d, nodeCount, selectedNoteId) / screenScale)
+      .attr("stroke-width", 2 / screenScale)
+      .attr("y", (d) => -(nodeRadius(d) + 8) / screenScale)
+      .attr("font-weight", (d) => {
+        if (d.id === selectedNoteId) return 600
+        if (d.depth !== undefined && d.depth <= 1 && d.linkCount > 0) return 500
+        return 400
+      })
+      .style("opacity", (d) =>
+        labelOpacity(d, nodeCount, selectedNoteId, hoveredId, scale, query),
+      )
+
+  }, [selectedNoteId, graph.nodes.length])
 
   /* ---- Re-render when graph, mode, or selection changes ---- */
   useEffect(() => {
@@ -955,8 +1110,22 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
   useEffect(() => {
     if (!svgRef.current) return
     const svg = d3.select(svgRef.current)
+    const scale = currentTransformRef.current?.k ?? 1
+    const screenScale = Math.max(scale, 0.85)
+    const nodeCount = graph.nodes.length
+
     if (!filterQuery.trim()) {
       svg.selectAll(".graph-node").style("opacity", 1)
+      svg.selectAll<SVGTextElement, RenderNodeDatum>(".node-label")
+        .attr("display", (d) =>
+          labelOpacity(d, nodeCount, selectedNoteIdRef.current, hoveredNodeRef.current, scale, "") > 0 ? null : "none",
+        )
+        .attr("font-size", (d) => labelFontSize(d, nodeCount, selectedNoteIdRef.current) / screenScale)
+        .attr("stroke-width", 2 / screenScale)
+        .attr("y", (d) => -(nodeRadius(d) + 8) / screenScale)
+        .style("opacity", (d) =>
+          labelOpacity(d, nodeCount, selectedNoteIdRef.current, hoveredNodeRef.current, scale, ""),
+        )
       return
     }
     const q = filterQuery.toLowerCase()
@@ -965,7 +1134,17 @@ export function D3GraphView({ onNavigate }: { onNavigate?: (tabId: any) => void 
       .style("opacity", (d) =>
         d.title.toLowerCase().includes(q) ? 1 : 0.08,
       )
-  }, [filterQuery])
+    svg.selectAll<SVGTextElement, RenderNodeDatum>(".node-label")
+      .attr("display", (d) =>
+        labelOpacity(d, nodeCount, selectedNoteIdRef.current, hoveredNodeRef.current, scale, filterQuery) > 0 ? null : "none",
+      )
+      .attr("font-size", (d) => labelFontSize(d, nodeCount, selectedNoteIdRef.current) / screenScale)
+      .attr("stroke-width", 2 / screenScale)
+      .attr("y", (d) => -(nodeRadius(d) + 8) / screenScale)
+      .style("opacity", (d) =>
+        labelOpacity(d, nodeCount, selectedNoteIdRef.current, hoveredNodeRef.current, scale, filterQuery),
+      )
+  }, [filterQuery, graph.nodes.length])
 
   /* ---- Resize handler ---- */
   useEffect(() => {

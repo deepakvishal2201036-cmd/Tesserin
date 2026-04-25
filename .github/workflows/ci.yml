@@ -1,115 +1,141 @@
-# ───────────────────────────────────────────────────────────────
-#  Tesserin CI – Build & verify on every push / PR
-# ───────────────────────────────────────────────────────────────
 name: CI
 
 on:
   push:
-    branches: [main, dev]
-    tags-ignore:
-      - 'v*'  # Don't run CI on release tags (release.yml handles those)
+    branches:
+      - main
+      - dev
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # ─────────────────────────────────────────────────────────────
-  # Job 1: Quick checks (type-check, lint, tests)
-  # ─────────────────────────────────────────────────────────────
-  check:
-    name: Type-check & Test
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  verify:
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d
         with:
-          version: 9
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install Windows Python build support
+        if: runner.os == 'Windows'
+        run: pip install setuptools
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
-      - name: Type-check renderer
-        run: pnpm tsc --noEmit
+      - name: Typecheck renderer
+        run: pnpm exec tsc --noEmit
 
-      - name: Type-check electron main
-        run: pnpm tsc -p electron/tsconfig.json --noEmit
+      - name: Typecheck Electron main process
+        run: pnpm exec tsc -p electron/tsconfig.json --noEmit
 
-      - name: Run tests
+      - name: Test
         run: pnpm test
 
-  # ─────────────────────────────────────────────────────────────
-  # Job 2: Build verification on all platforms
-  # ─────────────────────────────────────────────────────────────
-  build:
-    name: Build (${{ matrix.os }})
-    needs: check
+      - name: Build renderer
+        run: pnpm build
+
+      - name: Build MCP server
+        run: pnpm mcp:build
+
+  package:
+    name: Package (${{ matrix.name }})
+    needs: verify
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 60
 
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            platform: mac
-          - os: ubuntu-latest
-            platform: linux
-          - os: windows-latest
-            platform: win
+          - name: macos-arm64
+            os: macos-latest
+            target: "--mac zip"
+          - name: windows-x64
+            os: windows-latest
+            target: --win
+          - name: linux-x64
+            os: ubuntu-latest
+            target: --linux
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d
         with:
-          version: 9
+          run_install: false
 
-      - name: Install Python setuptools (Windows)
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install Windows Python build support
         if: runner.os == 'Windows'
         run: pip install setuptools
 
+      - name: Install Linux packaging dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fakeroot rpm libarchive-tools
+
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build renderer
         run: pnpm build
 
       - name: Build Electron main process
-        run: pnpm tsc -p electron/tsconfig.json
+        run: pnpm exec tsc -p electron/tsconfig.json
 
-      - name: Install packaging tools (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get install -y libarchive-tools
-
-      - name: Package Electron app (dry-run)
-        # macOS: build arm64 only to avoid concurrent hardlink EEXIST
-        # (dmg + zip targets share the same appOutDir and race on icon.icns)
-        shell: bash
-        run: |
-          if [ "${{ matrix.platform }}" = "mac" ]; then
-            pnpm electron-builder --publish never --mac --arm64
-          else
-            pnpm electron-builder --publish never --${{ matrix.platform }}
-          fi
+      - name: Package desktop app
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec electron-builder ${{ matrix.target }} --publish never
+
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tesserin-${{ matrix.name }}
+          path: |
+            release/**
+            !release/builder-debug.yml
+          if-no-files-found: error
+          retention-days: 14

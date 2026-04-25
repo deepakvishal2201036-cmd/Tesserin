@@ -53,7 +53,7 @@ pnpm install
 pnpm dev
 ```
 
-The app opens automatically at `http://localhost:5173` with Electron wrapping it.
+The renderer runs at `http://127.0.0.1:5173` and the Electron shell auto-restarts when files in `electron/` change.
 
 ---
 
@@ -182,9 +182,9 @@ Tesserin-pro/
 
 | Command | Description |
 |---------|-------------|
-| `pnpm dev` | Start Vite dev server + Electron in parallel |
+| `pnpm dev` | Start Vite on `127.0.0.1` and auto-restarting Electron in parallel |
 | `pnpm build` | Build renderer for production |
-| `pnpm electron:dev` | Compile & launch Electron only |
+| `pnpm electron:dev` | Watch, rebuild, and relaunch the Electron shell for main/preload changes |
 | `pnpm electron:build` | Package Electron app for current platform |
 | `pnpm lint` | Run ESLint |
 

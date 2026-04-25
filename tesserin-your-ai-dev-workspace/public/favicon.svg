@@ -1,0 +1,77 @@
+<svg viewBox="0 0 512 512" width="1024" height="1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#1c1a14"/>
+      <stop offset="100%" stop-color="#080705"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Full square background -->
+  <rect width="512" height="512" fill="url(#bg)" rx="80"/>
+
+  <!-- Outer rough wobble ring -->
+  <path
+    d="M256 42 C344 36, 448 112, 460 208 C472 304, 408 424, 300 456 C192 488, 72 424, 48 316 C24 208, 98 48, 256 42Z"
+    stroke="#FACC15"
+    stroke-width="10"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+    opacity="0.30"
+  />
+
+  <!-- Outer tesseract pentagon — main shape -->
+  <path
+    d="M256 100 L392 200 L344 362 L168 362 L120 200 Z"
+    stroke="#FACC15"
+    stroke-width="12"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+    opacity="0.90"
+  />
+
+  <!-- Inner smaller offset pentagon — depth -->
+  <path
+    d="M256 155 L348 222 L314 332 L198 332 L164 222 Z"
+    stroke="#FACC15"
+    stroke-width="7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+    opacity="0.45"
+  />
+
+  <!-- Tesseract connecting edges — outer to inner -->
+  <line x1="256" y1="100" x2="256" y2="155" stroke="#FACC15" stroke-width="8" opacity="0.65" stroke-linecap="round"/>
+  <line x1="392" y1="200" x2="348" y2="222" stroke="#FACC15" stroke-width="8" opacity="0.65" stroke-linecap="round"/>
+  <line x1="344" y1="362" x2="314" y2="332" stroke="#FACC15" stroke-width="8" opacity="0.65" stroke-linecap="round"/>
+  <line x1="168" y1="362" x2="198" y2="332" stroke="#FACC15" stroke-width="8" opacity="0.65" stroke-linecap="round"/>
+  <line x1="120" y1="200" x2="164" y2="222" stroke="#FACC15" stroke-width="8" opacity="0.65" stroke-linecap="round"/>
+
+  <!-- Center crystal diamond — glowing fill -->
+  <path
+    d="M256 204 L296 256 L256 308 L216 256 Z"
+    stroke="#FACC15"
+    stroke-width="6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="#FACC15"
+    opacity="0.25"
+  />
+
+  <!-- Sparkle — top right -->
+  <circle cx="408" cy="108" r="8" fill="#FACC15" opacity="0.70"/>
+  <circle cx="432" cy="84"  r="5" fill="#FACC15" opacity="0.45"/>
+  <circle cx="390" cy="80"  r="4" fill="#FACC15" opacity="0.30"/>
+
+  <!-- Scribble accent — bottom left corner -->
+  <path
+    d="M80 400 Q96 380, 116 396 Q100 416, 80 400"
+    stroke="#FACC15"
+    stroke-width="6"
+    fill="none"
+    opacity="0.40"
+    stroke-linecap="round"
+  />
+</svg>

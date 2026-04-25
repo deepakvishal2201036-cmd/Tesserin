@@ -18,6 +18,7 @@ process.on('unhandledRejection', (reason) => {
 
 // Determine if we're in development mode
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
+const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5173'
 
 // Resolve icon path — in dev it's at project root, in production it's in resources/
 function resolveIconPath(): string {
@@ -83,7 +84,7 @@ function createWindow() {
 
   // Load the Vite dev server in development, or the bundled app in production
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173')
+    mainWindow.loadURL(devServerUrl)
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'))
@@ -247,7 +248,7 @@ app.whenReady().then(() => {
         "default-src 'self'",
         "script-src 'self' 'unsafe-inline'",                     // Vite HMR needs inline scripts
         "style-src 'self' 'unsafe-inline'",                               // Tailwind + inline styles
-        "connect-src 'self' ws://localhost:* http://localhost:*",  // Vite WS + Ollama
+        "connect-src 'self' ws://localhost:* http://localhost:* ws://127.0.0.1:* http://127.0.0.1:* ws://[::1]:* http://[::1]:*",  // Vite WS + local services
         "img-src 'self' data: blob:",
         "font-src 'self' data: https://esm.sh",
         "worker-src 'self' blob:",
@@ -271,7 +272,7 @@ app.whenReady().then(() => {
     })
   })
 
-  console.log('[Tesserin] Window created, loading', isDev ? 'http://localhost:5173' : 'dist/index.html')
+  console.log('[Tesserin] Window created, loading', isDev ? devServerUrl : 'dist/index.html')
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -50,3 +50,6 @@ npm-debug.log*
 pnpm-debug.log*
 # SPECTER
 .specterrc
+
+# Nested repo backups
+tesserin-your-ai-dev-workspace/.git.backup/

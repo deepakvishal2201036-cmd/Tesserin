@@ -35,9 +35,13 @@ function relativeTime(dateStr: string): string {
 
 interface MarkdownEditorProps {
   noteId?: string | null
+  onSelectNote?: (id: string) => void
+  isSecondary?: boolean
+  showSidebar?: boolean
+  onToggleSidebar?: () => void
 }
 
-export function MarkdownEditor({ noteId: externalNoteId }: MarkdownEditorProps) {
+export function MarkdownEditor({ noteId: externalNoteId, onSelectNote }: MarkdownEditorProps) {
   const { notes, selectedNoteId, searchNotes, selectNote, addNote, updateNote, deleteNote, createTag, addTagToNote, removeTagFromNote, navigateToWikiLink } = useNotes()
 
   const [showNoteList, setShowNoteList] = useState(false)
@@ -50,6 +54,17 @@ export function MarkdownEditor({ noteId: externalNoteId }: MarkdownEditorProps) 
   const selectedNote = useMemo(() => notes.find((n) => n.id === activeId) ?? null, [notes, activeId])
   
   const { isDark: isDarkTheme } = useTesserinTheme()
+
+  const handleSelectNote = useCallback(
+    (id: string) => {
+      if (onSelectNote) {
+        onSelectNote(id)
+      } else {
+        selectNote(id)
+      }
+    },
+    [onSelectNote, selectNote],
+  )
 
   useEffect(() => {
     if (editorRef.current && selectedNote) {
@@ -86,7 +101,7 @@ export function MarkdownEditor({ noteId: externalNoteId }: MarkdownEditorProps) 
 
   const handleCreateNote = () => {
     const id = addNote("Untitled Note", "")
-    selectNote(id)
+    handleSelectNote(id)
     setShowNoteList(false)
   }
 
@@ -156,7 +171,7 @@ export function MarkdownEditor({ noteId: externalNoteId }: MarkdownEditorProps) 
                       <button
                         key={n.id}
                         onClick={() => {
-                          selectNote(n.id)
+                          handleSelectNote(n.id)
                           setShowNoteList(false)
                         }}
                         className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 line-clamp-1 transition-colors ${

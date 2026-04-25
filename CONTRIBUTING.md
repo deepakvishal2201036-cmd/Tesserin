@@ -51,7 +51,7 @@ pnpm dev
    git checkout -b feat/your-feature
    ```
 
-2. **Make your changes** — the dev server hot-reloads automatically.
+2. **Make your changes** — Vite hot-reloads renderer changes, and Electron restarts automatically when files in `electron/` change.
 
 3. **Test your changes**:
    ```bash

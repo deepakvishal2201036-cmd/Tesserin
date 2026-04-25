@@ -1,0 +1,210 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tesserin design system — yellow on obsidian black, light + dark themes */
+
+@layer base {
+  :root {
+    /* LIGHT MODE — warm cream + obsidian text + yellow accents */
+    --background: 48 30% 97%;
+    --foreground: 220 25% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 8%;
+
+    --primary: 45 100% 50%;
+    --primary-foreground: 220 25% 8%;
+    --primary-glow: 50 100% 60%;
+
+    --secondary: 45 30% 92%;
+    --secondary-foreground: 220 25% 8%;
+
+    --muted: 45 20% 94%;
+    --muted-foreground: 220 10% 40%;
+
+    --accent: 45 100% 50%;
+    --accent-foreground: 220 25% 8%;
+    --accent-glow: 50 100% 65%;
+
+    --destructive: 0 84% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 45 20% 88%;
+    --input: 45 20% 88%;
+    --ring: 45 100% 50%;
+
+    --radius: 0.875rem;
+
+    --gradient-primary: linear-gradient(135deg, hsl(45 100% 50%), hsl(38 100% 55%));
+    --gradient-accent: linear-gradient(135deg, hsl(50 100% 60%), hsl(38 100% 50%));
+    --gradient-radial: radial-gradient(circle at 50% 0%, hsl(45 100% 50% / 0.18), transparent 60%);
+    --gradient-text: linear-gradient(180deg, hsl(220 25% 8%), hsl(220 15% 30%));
+    --gradient-border: linear-gradient(135deg, hsl(45 100% 50% / 0.6), hsl(38 100% 55% / 0.4));
+
+    --glow-primary: 0 0 60px hsl(45 100% 50% / 0.4);
+    --glow-accent: 0 0 60px hsl(45 100% 50% / 0.35);
+    --shadow-elegant: 0 30px 80px -20px hsl(45 100% 40% / 0.35);
+    --shadow-card: 0 8px 30px -8px hsl(220 25% 8% / 0.12);
+
+    --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 25% 8%;
+    --sidebar-primary: 45 100% 50%;
+    --sidebar-primary-foreground: 220 25% 8%;
+    --sidebar-accent: 45 30% 92%;
+    --sidebar-accent-foreground: 220 25% 8%;
+    --sidebar-border: 45 20% 88%;
+    --sidebar-ring: 45 100% 50%;
+  }
+
+  .dark {
+    /* DARK MODE — obsidian black + warm yellow */
+    --background: 220 25% 4%;
+    --foreground: 45 30% 96%;
+
+    --card: 220 25% 6%;
+    --card-foreground: 45 30% 96%;
+
+    --popover: 220 25% 6%;
+    --popover-foreground: 45 30% 96%;
+
+    --primary: 48 100% 55%;
+    --primary-foreground: 220 25% 4%;
+    --primary-glow: 50 100% 65%;
+
+    --secondary: 220 20% 10%;
+    --secondary-foreground: 45 30% 96%;
+
+    --muted: 220 20% 8%;
+    --muted-foreground: 45 10% 65%;
+
+    --accent: 48 100% 55%;
+    --accent-foreground: 220 25% 4%;
+    --accent-glow: 50 100% 65%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 12%;
+    --input: 220 20% 12%;
+    --ring: 48 100% 55%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(48 100% 55%), hsl(38 100% 50%));
+    --gradient-accent: linear-gradient(135deg, hsl(50 100% 65%), hsl(38 100% 55%));
+    --gradient-radial: radial-gradient(circle at 50% 0%, hsl(48 100% 55% / 0.22), transparent 60%);
+    --gradient-text: linear-gradient(180deg, hsl(45 30% 98%), hsl(45 15% 70%));
+    --gradient-border: linear-gradient(135deg, hsl(48 100% 55% / 0.5), hsl(38 100% 50% / 0.4));
+
+    --glow-primary: 0 0 60px hsl(48 100% 55% / 0.45);
+    --glow-accent: 0 0 60px hsl(48 100% 55% / 0.35);
+    --shadow-elegant: 0 30px 80px -20px hsl(48 100% 50% / 0.5);
+    --shadow-card: 0 8px 30px -8px hsl(220 25% 0% / 0.7);
+
+    --sidebar-background: 220 25% 6%;
+    --sidebar-foreground: 45 30% 96%;
+    --sidebar-primary: 48 100% 55%;
+    --sidebar-primary-foreground: 220 25% 4%;
+    --sidebar-accent: 220 20% 10%;
+    --sidebar-accent-foreground: 45 30% 96%;
+    --sidebar-border: 220 20% 12%;
+    --sidebar-ring: 48 100% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, hsl(270 95% 50% / 0.18), transparent),
+      radial-gradient(ellipse 60% 50% at 80% 110%, hsl(190 100% 50% / 0.12), transparent);
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  code, pre, .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-gradient-accent {
+    background: var(--gradient-accent);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.5) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.5) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 80%);
+  }
+
+  .glass {
+    background: hsl(var(--card) / 0.5);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid hsl(var(--border));
+  }
+
+  .glow-primary { box-shadow: var(--glow-primary); }
+  .glow-accent { box-shadow: var(--glow-accent); }
+
+  .border-gradient {
+    position: relative;
+    background:
+      linear-gradient(hsl(var(--card)), hsl(var(--card))) padding-box,
+      var(--gradient-border) border-box;
+    border: 1px solid transparent;
+  }
+
+  .marquee {
+    animation: marquee 35s linear infinite;
+  }
+
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-12px); }
+  }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+  .animate-pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
+}
