@@ -628,7 +628,51 @@ function registerIpcHandlers() {
     });
     // ── Terminal (PTY) ──────────────────────────────────────────────────
     const ptyProcesses = new Map();
-    const ptyDataHandlerRegistered = new Set();
+    const ptyDataHandlers = new Map();
+    const terminalSenders = new Map();
+    function cleanupTerminalSession(id, killProcess = false) {
+        const ptyProcess = ptyProcesses.get(id);
+        if (killProcess && ptyProcess) {
+            try {
+                ptyProcess.kill();
+            }
+            catch (error) {
+                console.warn(`[Terminal] Failed to kill process for ${id}:`, error);
+            }
+        }
+        ptyProcesses.delete(id);
+        terminalSenders.delete(id);
+        const dataHandler = ptyDataHandlers.get(id);
+        dataHandler?.dispose();
+        ptyDataHandlers.delete(id);
+    }
+    function ensureTerminalDataHandler(id) {
+        if (ptyDataHandlers.has(id))
+            return;
+        const ptyProcess = ptyProcesses.get(id);
+        if (!ptyProcess)
+            return;
+        const dataHandler = ptyProcess.onData((data) => {
+            const sender = terminalSenders.get(id);
+            if (!sender)
+                return;
+            if (sender.isDestroyed()) {
+                terminalSenders.delete(id);
+                return;
+            }
+            try {
+                sender.send('terminal:data', id, data);
+            }
+            catch (error) {
+                if (sender.isDestroyed()) {
+                    terminalSenders.delete(id);
+                    return;
+                }
+                console.warn(`[Terminal] Failed to forward data for ${id}:`, error);
+            }
+        });
+        ptyDataHandlers.set(id, dataHandler);
+    }
     electron_1.ipcMain.handle('terminal:openExternal', (_e, url) => {
         // Only allow http/https URLs to prevent protocol abuse
         if (!/^https?:\/\//.test(url))
@@ -719,6 +763,9 @@ function registerIpcHandlers() {
                 env: safeEnv(),
             });
             ptyProcesses.set(id, ptyProcess);
+            ptyProcess.onExit(() => {
+                cleanupTerminalSession(id);
+            });
             console.log(`[Terminal] Created new process for ${id} (PID: ${ptyProcess.pid})`);
             return { success: true, pid: ptyProcess.pid };
         }
@@ -746,21 +793,36 @@ function registerIpcHandlers() {
     electron_1.ipcMain.handle('terminal:kill', (_e, id) => {
         const ptyProcess = ptyProcesses.get(id);
         if (ptyProcess) {
-            ptyProcess.kill();
-            ptyProcesses.delete(id);
-            ptyDataHandlerRegistered.delete(id);
+            cleanupTerminalSession(id, true);
             return true;
         }
         return false;
     });
     electron_1.ipcMain.on('terminal:data', (event, id) => {
         const ptyProcess = ptyProcesses.get(id);
-        if (ptyProcess && !ptyDataHandlerRegistered.has(id)) {
-            ptyDataHandlerRegistered.add(id);
-            ptyProcess.onData((data) => {
-                event.sender.send('terminal:data', id, data);
-            });
+        if (ptyProcess) {
+            ensureTerminalDataHandler(id);
+            const currentSender = terminalSenders.get(id);
+            if (!currentSender || currentSender.id !== event.sender.id) {
+                terminalSenders.set(id, event.sender);
+                event.sender.once('destroyed', () => {
+                    const activeSender = terminalSenders.get(id);
+                    if (activeSender?.id === event.sender.id) {
+                        terminalSenders.delete(id);
+                    }
+                });
+            }
         }
+    });
+    electron_1.ipcMain.on('browser-window-created', (_event, window) => {
+        const webContents = window.webContents;
+        webContents.once('destroyed', () => {
+            for (const [terminalId, sender] of terminalSenders.entries()) {
+                if (sender.id === webContents.id) {
+                    terminalSenders.delete(terminalId);
+                }
+            }
+        });
     });
 }
 //# sourceMappingURL=ipc-handlers.js.map

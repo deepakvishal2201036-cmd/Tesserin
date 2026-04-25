@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow, shell as electronShell } from 'electron'
+import { ipcMain, dialog, BrowserWindow, shell as electronShell, type WebContents } from 'electron'
 import * as db from './database'
 import * as ai from './ai-service'
 import * as kb from './knowledge-base'
@@ -647,7 +647,55 @@ export function registerIpcHandlers(): void {
 
     // ── Terminal (PTY) ──────────────────────────────────────────────────
     const ptyProcesses = new Map<string, pty.IPty>()
-    const ptyDataHandlerRegistered = new Set<string>()
+    const ptyDataHandlers = new Map<string, pty.IDisposable>()
+    const terminalSenders = new Map<string, WebContents>()
+
+    function cleanupTerminalSession(id: string, killProcess = false) {
+        const ptyProcess = ptyProcesses.get(id)
+        if (killProcess && ptyProcess) {
+            try {
+                ptyProcess.kill()
+            } catch (error) {
+                console.warn(`[Terminal] Failed to kill process for ${id}:`, error)
+            }
+        }
+
+        ptyProcesses.delete(id)
+        terminalSenders.delete(id)
+
+        const dataHandler = ptyDataHandlers.get(id)
+        dataHandler?.dispose()
+        ptyDataHandlers.delete(id)
+    }
+
+    function ensureTerminalDataHandler(id: string) {
+        if (ptyDataHandlers.has(id)) return
+
+        const ptyProcess = ptyProcesses.get(id)
+        if (!ptyProcess) return
+
+        const dataHandler = ptyProcess.onData((data: string) => {
+            const sender = terminalSenders.get(id)
+            if (!sender) return
+
+            if (sender.isDestroyed()) {
+                terminalSenders.delete(id)
+                return
+            }
+
+            try {
+                sender.send('terminal:data', id, data)
+            } catch (error) {
+                if (sender.isDestroyed()) {
+                    terminalSenders.delete(id)
+                    return
+                }
+                console.warn(`[Terminal] Failed to forward data for ${id}:`, error)
+            }
+        })
+
+        ptyDataHandlers.set(id, dataHandler)
+    }
 
     ipcMain.handle('terminal:openExternal', (_e, url: string) => {
         // Only allow http/https URLs to prevent protocol abuse
@@ -737,6 +785,9 @@ export function registerIpcHandlers(): void {
                 env: safeEnv() as { [key: string]: string },
             })
             ptyProcesses.set(id, ptyProcess)
+            ptyProcess.onExit(() => {
+                cleanupTerminalSession(id)
+            })
             console.log(`[Terminal] Created new process for ${id} (PID: ${ptyProcess.pid})`)
             return { success: true, pid: ptyProcess.pid }
         } catch (err) {
@@ -766,9 +817,7 @@ export function registerIpcHandlers(): void {
     ipcMain.handle('terminal:kill', (_e, id: string) => {
         const ptyProcess = ptyProcesses.get(id)
         if (ptyProcess) {
-            ptyProcess.kill()
-            ptyProcesses.delete(id)
-            ptyDataHandlerRegistered.delete(id)
+            cleanupTerminalSession(id, true)
             return true
         }
         return false
@@ -776,11 +825,30 @@ export function registerIpcHandlers(): void {
 
     ipcMain.on('terminal:data', (event, id: string) => {
         const ptyProcess = ptyProcesses.get(id)
-        if (ptyProcess && !ptyDataHandlerRegistered.has(id)) {
-            ptyDataHandlerRegistered.add(id)
-            ptyProcess.onData((data: string) => {
-                event.sender.send('terminal:data', id, data)
-            })
+        if (ptyProcess) {
+            ensureTerminalDataHandler(id)
+
+            const currentSender = terminalSenders.get(id)
+            if (!currentSender || currentSender.id !== event.sender.id) {
+                terminalSenders.set(id, event.sender)
+                event.sender.once('destroyed', () => {
+                    const activeSender = terminalSenders.get(id)
+                    if (activeSender?.id === event.sender.id) {
+                        terminalSenders.delete(id)
+                    }
+                })
+            }
         }
+    })
+
+    ipcMain.on('browser-window-created', (_event, window) => {
+        const webContents = window.webContents
+        webContents.once('destroyed', () => {
+            for (const [terminalId, sender] of terminalSenders.entries()) {
+                if (sender.id === webContents.id) {
+                    terminalSenders.delete(terminalId)
+                }
+            }
+        })
     })
 }

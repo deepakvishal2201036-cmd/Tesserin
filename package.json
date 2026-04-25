@@ -7,7 +7,7 @@
   "author": "Anvin <gooseinteandi@gmail.com>",
   "main": "electron/dist/main.js",
   "scripts": {
-    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"pnpm electron:dev\"",
+    "dev": "node scripts/dev.mjs",
     "electron:dev": "node scripts/electron-dev.mjs",
     "electron:build:main": "tsc -p electron/tsconfig.json",
     "build": "vite build",
